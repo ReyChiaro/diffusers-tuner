@@ -1,0 +1,25 @@
+defaults:
+  - pipelines: qwenimage_edit_plus
+
+  - _self_
+
+
+# Runtime paths
+project_name: pipeline_finetune
+timestamp: ${now:%Y%m%d-%H%M%S}
+output_dir: outputs/${project_name}/${timestamp}
+logging_dir: ${output_dir}/logs
+save_dir: ${output_dir}/checkpoints
+
+
+
+# Accelerator
+accelerator:
+  mixed_precision: bf16
+  gradient_accumulation_steps: 1
+  log_with: tensorboard
+  
+
+hydra:
+  run:
+    dir: ${output_dir}/hydra-configs
