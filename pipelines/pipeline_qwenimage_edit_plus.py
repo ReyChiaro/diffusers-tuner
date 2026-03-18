@@ -27,6 +27,8 @@ def tuning_step(
     mu_mode_scale: float = 1.29,
     VAE_MAX_RESOLUTION: int = VAE_IMAGE_SIZE,
     CONDITION_MAX_RESOLUTION: int = CONDITION_IMAGE_SIZE,
+    device: Optional[torch.device] = None,
+    weight_dtype: Optional[torch.dtype] = None,
 ):
     r"""
     Args:
@@ -46,12 +48,14 @@ def tuning_step(
 
     """
     # ---- Prepare useful arguments ---- #
-    device = accelerator.device
-    weight_dtype = torch.float32
-    if accelerator.mixed_precision == "bf16":
-        weight_dtype = torch.bfloat16
-    elif accelerator.mixed_precision == "fp16":
-        weight_dtype = torch.float16
+    device = device or accelerator.device
+    if weight_dtype is None:
+        if accelerator.mixed_precision == "bf16":
+            weight_dtype = torch.bfloat16
+        elif accelerator.mixed_precision == "fp16":
+            weight_dtype = torch.float16
+        else:
+            weight_dtype = torch.float32
 
     images: List[torch.Tensor] = batch.get("images", None)
     targets: torch.Tensor = batch.get("targets", None)
