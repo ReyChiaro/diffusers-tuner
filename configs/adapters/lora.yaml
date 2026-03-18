@@ -1,0 +1,11 @@
+_target_: adapters.utils.AdapterManager
+target_modules: [
+  "attn.to_q",
+  "attn.to_k",
+  "attn.to_v",
+  "attn.to_out.0",
+]
+rank: 16
+alpha: 16
+adapter_name: default_lora_adapter
+bias: false

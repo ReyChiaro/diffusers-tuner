@@ -1,0 +1,4 @@
+timestep_weighting_scheme: logit_normal
+mu_logit_mean: 0.0
+mu_logit_std: 0.02
+mu_mode_scale: 1.29
