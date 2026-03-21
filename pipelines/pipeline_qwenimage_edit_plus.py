@@ -13,7 +13,67 @@ from diffusers.training_utils import (
     compute_loss_weighting_for_sd3,
 )
 
+from diffusers.models.autoencoders.autoencoder_kl_qwenimage import AutoencoderKLQwenImage
+from diffusers.models.transformers.transformer_qwenimage import QwenImageTransformer2DModel
+from diffusers.schedulers.scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteScheduler
+from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
+from transformers.models.qwen2.tokenization_qwen2 import Qwen2Tokenizer
+from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+
+from omegaconf import OmegaConf
 from typing import List, Dict, Any, Optional
+
+
+def init_pipeline(
+    pipe_config: OmegaConf,
+    weight_dtype: torch.dtype,
+    device: torch.device,
+) -> QwenImageEditPlusPipeline:
+    scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
+        pipe_config.pretrained_model_name_or_path,
+        subfolder="scheduler",
+    )
+    vae = AutoencoderKLQwenImage.from_pretrained(
+        pipe_config.pretrained_model_name_or_path,
+        subfolder="vae",
+        torch_dtype=weight_dtype,
+    ).to(device)
+    transformer = QwenImageTransformer2DModel.from_pretrained(
+        pipe_config.pretrained_model_name_or_path,
+        subfolder="transformer",
+        torch_dtype=weight_dtype,
+    ).to(device)
+    for p in vae.parameters():
+        p.requires_grad_(False)
+    for p in transformer.parameters():
+        p.requires_grad_(False)
+    processor = tokenizer = text_encoder = None
+    if pipe_config.load_text_encoder:
+        processor = Qwen2VLProcessor.from_pretrained(
+            pipe_config.pretrained_model_name_or_path,
+            subfolder="processor",
+        )
+        tokenizer = Qwen2Tokenizer.from_pretrained(
+            pipe_config.pretrained_model_name_or_path,
+            subfolder="tokenizer",
+        )
+        text_encoder = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            pipe_config.pretrained_model_name_or_path,
+            subfolder="text_encoder",
+            torch_dtype=weight_dtype,
+        ).to(device)
+        for p in text_encoder.parameters():
+            p.requires_grad_(False)
+    pipeline = QwenImageEditPlusPipeline(
+        scheduler=scheduler,
+        vae=vae,
+        text_encoder=text_encoder,
+        tokenizer=tokenizer,
+        processor=processor,
+        transformer=transformer
+    )
+
+    return pipeline
 
 
 def tuning_step(
@@ -62,10 +122,10 @@ def tuning_step(
     if images is None or targets is None:
         raise ValueError("images or targets is None.")
     prompts: List[str] = batch.get("prompts", None)
-    prompt_embeds: torch.Tensor = batch.get("prompt_embeds", None)
-    prompt_embeds_mask: torch.Tensor = batch.get("prompt_embeds_mask", None)
+    prompt_embeds: torch.Tensor = batch.get("prompt_latents", None)
+    prompt_embeds_mask: torch.Tensor = batch.get("prompt_latents_mask", None)
 
-    batch_size = len(batch)
+    batch_size = len(targets)
     num_image_per_prompt = len(images)
     multiple_of = pipeline.vae_scale_factor * 2
     target_h = targets[0].shape[-2]
@@ -75,7 +135,7 @@ def tuning_step(
     scheduler = deepcopy(pipeline.scheduler)
 
     # ---- Prepare prompt embeds ---- #
-    if prompts is None:
+    if prompts[0] is None:
         if prompt_embeds is None or prompt_embeds_mask is None:
             raise ValueError("Both prompts and prompt_embeds are None.")
     else:
@@ -101,7 +161,7 @@ def tuning_step(
                 prompt=prompts[b],
                 image=[condition_images[i][b] for i in range(num_image_per_prompt)],
                 device=device,
-                num_image_per_prompt=1,
+                num_images_per_prompt=1,
                 prompt_embeds=None,
                 prompt_embeds_mask=None,
             )
@@ -121,27 +181,31 @@ def tuning_step(
             image=image,
             height=vae_h,
             width=vae_w,
-        )
+        ).unsqueeze(2)
         vae_images.append(vae_image)
         vae_shapes.append((vae_h, vae_w))
+    targets = targets.unsqueeze(2)
 
     eps_latents = []
     img_latents = []
     for b in range(batch_size):
         n_latent, i_laetent = pipeline.prepare_latents(
-            images=[targets[b]] + [vae_images[i][b] for i in range(num_image_per_prompt)],
+            images=[targets[b].unsqueeze(0)] + [vae_images[i][b].unsqueeze(0) for i in range(num_image_per_prompt)],
             num_channels_latents=num_channels,
             height=target_h,
             width=target_w,
             dtype=weight_dtype,
             device=device,
+            generator=generator,
+            batch_size=batch_size,
         )
         eps_latents.append(n_latent)
         img_latents.append(i_laetent)
 
-    eps_latents = torch.stack(eps_latents)
-    img_latents = torch.stack(img_latents)
-    target_latents = img_latents[:, : (target_h // multiple_of) * (target_w // multiple_of)]
+    eps_latents = torch.cat(eps_latents)
+    img_latents = torch.cat(img_latents)
+
+    target_latents = img_latents[:, :(target_h // multiple_of) * (target_w // multiple_of)]
     img_latents = img_latents[:, (target_h // multiple_of) * (target_w // multiple_of) :]
 
     image_shapes = [
@@ -181,7 +245,7 @@ def tuning_step(
     prompt_seq_lengths = prompt_embeds_mask.sum(dim=1).tolist()
 
     # Predict vector field
-    latents = torch.cat([noisy_latents, img_latents], dim=1)
+    latents = torch.cat([noisy_latents, img_latents], dim=-2)
     pred_v = pipeline.transformer(
         hidden_states=latents,
         encoder_hidden_states=prompt_embeds,
@@ -194,12 +258,12 @@ def tuning_step(
     )[0]
     pred_v = pred_v[:, : noisy_latents.shape[1]]
 
-    pred_v = pipeline._unpack_latents(
-        pred_v,
-        height=target_h,
-        width=target_w,
-        vae_scale_factor=pipeline.vae_scale_factor,
-    )
+    # pred_v = pipeline._unpack_latents(
+    #     pred_v,
+    #     height=target_h,
+    #     width=target_w,
+    #     vae_scale_factor=pipeline.vae_scale_factor,
+    # )
     target_v = eps_latents - target_latents
 
     loss_w = compute_loss_weighting_for_sd3(
