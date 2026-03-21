@@ -86,8 +86,8 @@ python main.py \
 
 ## 📝 Roadmap
 
-[x] Full Tuning Loop Implementation
-[x] Hierarchical Configuration System
-[x] DDP & Accelerator Support
-[ ] Evaluation Interfaces & Benchmarking
-[ ] Support for more SOTA pipelines
+- [x] Full Tuning Loop Implementation
+- [x] Hierarchical Configuration System
+- [x] DDP & Accelerator Support
+- [ ] Evaluation Interfaces & Benchmarking
+- [ ] Support for more SOTA pipelines
