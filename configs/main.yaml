@@ -1,7 +1,12 @@
 defaults:
-  - pipelines: qwenimage_edit_plus
-  - adapters: lora
+
+  - pipeline: qwenimage_edit_plus
+  - adapter: lora
   - loss: flow_matching
+
+  - dataset@tune_set: tune_set
+  - dataset@eval_set: eval_set
+  - dataset@data_module: data_module
 
   - _self_
 
@@ -23,7 +28,7 @@ accelerator:
 
 # Tuning
 tune:
-  seed: 42
+  random_seed: 42
   max_grad_norm: 1.0
   max_tuning_steps: 2000
   save_steps: 500

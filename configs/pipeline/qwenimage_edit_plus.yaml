@@ -2,3 +2,5 @@ pretrained_model_name_or_path: "Qwen/Qwen-Image-Edit-2511"
 tune_modules: [
   "transformer"
 ]
+
+load_text_encoder: false

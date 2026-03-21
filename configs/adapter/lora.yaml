@@ -1,4 +1,4 @@
-_target_: adapters.utils.AdapterManager
+_target_: adapters.utils.AdapterConfigs
 target_modules: [
   "attn.to_q",
   "attn.to_k",
