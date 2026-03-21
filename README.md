@@ -1,107 +1,93 @@
-# Diffusers Tuner: A Simple Finetuner for 🤗[diffusers](https://github.com/huggingface/diffusers)
+# 🎨 Diffusers Tuner: A Lightweight, Configuration-Driven Fine-tuning Framework for 🤗 [diffusers](https://github.com/huggingface/diffusers)
 
-Do not want to re-write the whole pipelines? Hunger for configuration system? A suitable tuning framework? Do not know how to register and enable a LoRA for pipeliens? There it is, our diffusers tuner solves provides a tuning framework for diffusers. This repository implements a tuning pipeline including data preparations, `__call__` like tune step interface, and configuration system with DDP support.
+Diffusers Tuner is designed to eliminate the overhead of fine-tuning diffusion models. Tired of rewriting training pipelines from scratch? Struggling with complex LoRA injections or messy configuration management?
 
+Our framework provides a streamlined, "plug-and-play" experience for the diffusers ecosystem, implementing a complete pipeline including data preparation, a high-level `__call__`-style tuning interface, and a robust configuration system with native DDP support.
 
-# 🚀 Quick Start
+## ✨ Key Features
 
-Just `git clone` or download zip of this repo. We provide both `pyproject.toml` and `requirements.txt` for `uv` as well `pip` users.
+- Zero-Friction Adaptation: Tune existing diffusers pipelines without refactoring the core logic.
+- Config-First Workflow: Powered by Hydra for flexible, hierarchical configuration management.
+- Lightweight LoRA: A simplified LoRA implementation that focuses on what matters—rank and target_modules—without the complexity of heavy libraries.
+- Research-Ready: Built-in support for Multi-image inputs, Flow-matching loss, and academic-grade logging.
+- Modern Model Support: Includes a specialized demo for Qwen2-VL (Qwen-Image-Edit).
 
-For `uv`, the following command is all you need.
+## 🚀 Quick Start
+
+1. Installation
+We recommend `uv` for lightning-fast dependency management, but standard `pip` works perfectly too:
+
 ```sh
+git clone https://github.com/your-username/diffusers-tuner.git
+cd diffusers-tuner
+
+# Using uv (Recommended)
 uv sync
-```
-And for `pip` just 
-```sh
+
+# Or using pip
 pip install -r requirements.txt
 ```
 
-> Note that this repo is based on `python3.12` with `torch>=2.10` and `diffusers>=0.37.0`, if you want to use it for lower version, maybe you can change the required lowest version in `pyproject.toml` and `requirements.txt` (We use these versions for we provide a `QwenImageEdit` demo in this repo).
+**Requirements**: This repository targets `Python 3.12, Torch 2.10+, and Diffusers 0.37.0+` to support advanced features like QwenImageEdit.
 
-The folder structure is
-```sh
+2. Project Structure
+
+A simple yet effective structure helps to understand the core of our framework.
+
+```Plaintext
 .
-│   # Configs
-├── configs
-│   ├── adapter
-│   │   └── lora.yaml
-│   ├── dataset
-│   │   ├── data_module.yaml
-│   │   ├── eval_set.yaml
-│   │   └── tune_set.yaml
-│   ├── loss
-│   │   └── flow_matching.yaml
-│   ├── pipeline
-│   │    └── qwenimage_edit_plus.yaml
-│   └── main.yaml
-│
-│   # Main codebase
-├── adapters
-│   ├── __init__.py
-│   ├── lora.py
-│   └── utils.py
-├── data
-│   ├── __init__.py
-│   ├── data_module.py
-│   └── style_transfer_dataset.py
-├── LICENSE
-├── main.py
-├── pipelines
-│   └── pipeline_qwenimage_edit_plus.py
-├── pyproject.toml
-├── README.md
-├── requirements.txt
-├── tuner.py
-└── uv.lock
+├── configs/             # Hydra configuration center (Adapter, Dataset, Loss, Pipeline, etc.)
+├── adapters/            # Lightweight adapter implementations (e.g., LoRA)
+├── data/                # Data modules and custom datasets
+├── pipelines/           # Specialized pipeline wrappers (e.g., QwenImageEditPlus)
+├── tuner.py             # The core tuning loop engine
+└── main.py              # Entry point for training
 ```
 
-## 🐈 How to use
+## 🐈 How to Use
 
-If everything is prepared, just launch the tuning by
-```sh
+### 🔥 Launch Tuning
+
+Start your training session with a single command:
+
+```Bash
 python main.py
 ```
-The outputs and saved checkpoints can be found in `outputs` (you can modify the path in `configs/main.yaml`).
 
-For an advanced usage, you can contunue read the following configuration definitions, which can be modified by runtime command line or files.
+Outputs and checkpoints are saved to the outputs directory (customizable in configs/main.yaml).
 
-### 🧩 Configs
+Take `QwenImageEdit` as example, GPU is 72G in the following situation:
 
-Files in `configs` provide configurations, all syntax can be found in [hydra](https://github.com/facebookresearch/hydra). But for a simple case, we have delivered a demo for [QwenImageEdit](https://huggingface.co/Qwen/Qwen-Image-Edit-2511).
-
-**adapter**: Defines the finetune adapter, we provide `lora.yaml` for instance. Note that there are little differences between ours and [peft](https://github.com/huggingface/peft). We NOT implement some complex functions, making tuning simple, only `rank` and `target_modules` are what we really care about for the most of time.
-
-**dataset**: Datasets used for tuning should be prepared by this configuration. Normally, we care about following attributes in one sample:
-
-- `images`: List of images tensors, which makes our framework usable for multiple images inputs.
-- `prompts`: List of `str` prompts, optional if `prompt_embeds` and `prompt_embeds_mask` are given. Note that if prompts are given, no matter whether embeddings and masks are given, we will encode the prompts to generate new features.
-- `targets`: Tensor, the generated targets.
-- `prompt_embeds` and `prompt_embeds_mask`: Tensor, the text encoder results, required if NO prompts are specified.
-- `negative_prompts`: List of `str`.
-- `negative_prompt_embeds` and `negative_prompt_embeds_mask`: Tensor, text encoder encoded features for `negative_prompts`.
-
-**loss**: Some arguments used to calculate loss.
-
-**pipeline**: Defines which module (module names can be got by `pipeline.components`) shuold the adapter attatch to and the pretrained pipeline path.
-
-**main**: Aggregate configurations from above and defines training parameters as well as accelerator and tuner arguments.
+- Resolution: 512 by 512
+- Batchsize: 1
+- Load text encoder: False
+- Num of images: 2
+- Precision: bf16
+- Gradient accumulation: 1
+- Target modules: [attn.to_q, attn.to_k, attn.to_v, attn.to_out.1]
 
 
-We give a demo for modifying/adding the configuration runtime, other usage can be found in [hydra](https://github.com/facebookresearch/hydra):
-```sh
+### 🧩 Configuration System
+Modify any parameter at runtime via the command line—no code changes required:
+
+```Bash
 python main.py \
-    data_module.tune_batch_size=4 \   # modify batchsize
-    adapter.rank=32 \                 # modify LoRA rank
-    +additional_args="hello word" \   # add addtional key-value pair
+    data_module.tune_batch_size=4 \   # Change batch size
+    adapter.rank=32 \                 # Adjust LoRA rank
+    +additional_args="hello_world"    # Inject custom key-value pairs
 ```
 
+**Module Breakdown**
 
-# 📝 TODO
+- Adapter: Defines the fine-tuning mechanism. Our LoRA implementation is cleaner than peft for most use cases, prioritizing simplicity.
+- Dataset: Handles complex inputs. Supports images (List of tensors), prompts, targets, and pre-computed prompt_embeds.
+- Pipeline: Maps adapters to specific sub-modules (e.g., transformer, unet) within the pretrained pipeline.
+- Loss: Configures the optimization objective (e.g., Flow-Matching arguments).
 
-Though our tuner complete tuning loop, there are also some future features we want to implement:
+## 📝 Roadmap
 
-- ✅ Tuning loop
-- ✅ Configuration system
-- ✅ Launching script
-- ☑️ Evaluation interfaces
-- ☑️ Support more pipelines
+[x] Full Tuning Loop Implementation
+[x] Hierarchical Configuration System
+[x] DDP & Accelerator Support
+[ ] Evaluation Interfaces & Benchmarking
+[ ] Support for more SOTA pipelines
