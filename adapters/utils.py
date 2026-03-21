@@ -19,7 +19,7 @@ class AdapterConfigs:
     rank: int = DEFAULT_RANK
     alpha: Optional[int] = None
     adapter_name: str = DEFAULT_NAME
-    target_modules: List[str] = field(default=[])
+    target_modules: List[str] = field(default_factory=[])
     bias: bool = False
 
 
@@ -58,12 +58,12 @@ class AdapterManager(nn.Module):
         self.active_adapter: str = ""
 
     def forward(self, x: Tensor):
-        x_type = x.dtype
-        m_type = self.base_model.dtype
-        x = x.to(m_type)
+        # x_type = x.dtype
+        # m_type = self.base_model.weight.dtype
+        # x = x.to(m_type)
         out = self.base_model(x)
 
-        if self.adapter_info[self.active_adapter]["is_enable"]:
+        if self.active_adapter and self.adapter_info[self.active_adapter]["is_enable"]:
             configs = self.adapter_info[self.active_adapter]
             rank = configs.get("rank", DEFAULT_RANK)
             alpha = configs.get("alpha", rank)
@@ -86,7 +86,7 @@ class AdapterManager(nn.Module):
 
             out = out + ada_out
 
-        out = out.to(x_type)
+        # out = out.to(x_type)
         return out
 
 
@@ -109,7 +109,7 @@ def register_adapter(model: nn.Module):
 
         splited_name = name.split(".")
         parent_name = ".".join(splited_name[:-1])
-        parent_node = module.get_submodule(parent_name)
+        parent_node = model.get_submodule(parent_name)
         target_name = splited_name[-1]
 
         adapter = AdapterManager(module)
@@ -159,6 +159,7 @@ def add_adapter(model: nn.Module, configs: AdapterConfigs, overwrite: bool = Fal
             nn.init.zeros_(module.bias_B[adapter_name])
 
         # Update the config of this module's adapter
+        module.adapter_info[adapter_name] = {}
         module.adapter_info[adapter_name]["configs"] = {
             "rank": rank,
             "alpha": configs.alpha,
@@ -167,15 +168,19 @@ def add_adapter(model: nn.Module, configs: AdapterConfigs, overwrite: bool = Fal
             "bias": configs.bias,
         }
         module.adapter_info[adapter_name]["is_enable"] = False
+        module.adapter_info[adapter_name]["is_active"] = False
 
 
 def enable_adapter(model: nn.Module, name: str):
     r"""
     Enable the gradient to True for adapter specific by name.
     """
-    for name, module in model.named_modules():
+    for _, module in model.named_modules():
         if not isinstance(module, AdapterManager):
             continue
+        if not name in module.adapter_info:
+            continue
+
         module.lora_A[name].requires_grad_(True)
         module.lora_B[name].requires_grad_(True)
 
@@ -190,8 +195,10 @@ def disable_adapter(model: nn.Module, name: str):
     r"""
     disable the gradient to True for adapter specific by name.
     """
-    for name, module in model.named_modules():
+    for _, module in model.named_modules():
         if not isinstance(module, AdapterManager):
+            continue
+        if not name in module.adapter_info:
             continue
         module.lora_A[name].requires_grad_(False)
         module.lora_B[name].requires_grad_(False)
@@ -201,3 +208,27 @@ def disable_adapter(model: nn.Module, name: str):
             module.bias_B[name].requires_grad_(False)
 
         module.adapter_info[name]["is_enable"] = False
+
+
+def activate_adapter(model: nn.Module, name: str):
+    for _, module in model.named_modules():
+        if not isinstance(module, AdapterManager):
+            continue
+        if not name in module.adapter_info:
+            continue
+
+        module.active_adapter = name
+        module.adapter_info[name]["is_active"] = True
+
+
+def deactivate_adapter(model: nn.Module, name: str):
+    for _, module in model.named_modules():
+        if not isinstance(module, AdapterManager):
+            continue
+        if not name in module.adapter_info:
+            continue
+
+        module.active_adapter = ""
+        module.adapter_info[name]["is_active"] = False
+
+
