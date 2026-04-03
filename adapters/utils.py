@@ -1,14 +1,15 @@
 import math
-import logging
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from dataclasses import dataclass, field
 from torch import Tensor
 from typing import List, Optional, Any, Dict
 
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+
 DEFAULT_RANK = 16
 DEFAULT_NAME = "default"
 
@@ -19,7 +20,7 @@ class AdapterConfigs:
     rank: int = DEFAULT_RANK
     alpha: Optional[int] = None
     adapter_name: str = DEFAULT_NAME
-    target_modules: List[str] = field(default_factory=[])
+    target_modules: list[str] = field(default_factory=[])
     bias: bool = False
 
 
@@ -58,35 +59,25 @@ class AdapterManager(nn.Module):
         self.active_adapter: str = ""
 
     def forward(self, x: Tensor):
-        # x_type = x.dtype
-        # m_type = self.base_model.weight.dtype
-        # x = x.to(m_type)
         out = self.base_model(x)
 
         if self.active_adapter and self.adapter_info[self.active_adapter]["is_enable"]:
-            configs = self.adapter_info[self.active_adapter]
+            configs = self.adapter_info[self.active_adapter]["configs"]
             rank = configs.get("rank", DEFAULT_RANK)
-            alpha = configs.get("alpha", rank)
-            scale = rank / alpha
+            alpha = configs.get("alpha") or rank
+            scale = alpha / rank
 
             A = self.lora_A[self.active_adapter]
-            bias_A = self.bias_A.get(self.active_adapter, None)
+            bias_A = self.bias_A[self.active_adapter] if self.active_adapter in self.bias_A else None
             B = self.lora_B[self.active_adapter]
-            bias_B = self.bias_B.get(self.active_adapter, None)
+            bias_B = self.bias_B[self.active_adapter] if self.active_adapter in self.bias_B else None
 
-            ada_out = scale * out @ A.T
-
-            if bias_A is not None:
-                ada_out = ada_out + bias_A
-
-            ada_out = ada_out @ B.T
-
-            if bias_B is not None:
-                ada_out = ada_out + bias_B
-
-            out = out + ada_out
-
-        # out = out.to(x_type)
+            # Use F.linear to avoid explicit transpose matmul and large temporary tensor.
+            # IMPORTANT: do not scale x first (i.e. `scale * x @ A.T`), which creates an
+            # extra tensor with the same shape as x and can trigger OOM.
+            ada_out = F.linear(x, A, bias_A)
+            ada_out = F.linear(ada_out, B, bias_B)
+            out = out + ada_out * scale
         return out
 
 
@@ -230,5 +221,3 @@ def deactivate_adapter(model: nn.Module, name: str):
 
         module.active_adapter = ""
         module.adapter_info[name]["is_active"] = False
-
-
