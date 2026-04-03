@@ -1,8 +1,10 @@
 import torch
-
+import dataclasses
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, Callable
+
+from data.tune_dataset import TuneDataset
 
 
 class DataModule:
@@ -93,3 +95,50 @@ class DataModule:
             num_workers=self.eval_num_workers,
             collate_fn=self.basic_collate_fn,
         )
+
+
+@dataclasses.dataclass
+class DataConfigs:
+
+    dataset: Dataset
+    batch_size: int = 1
+    num_workers: int = 4
+    enable_ddp: bool = False
+
+
+class TuneDataModule:
+
+    def __init__(self, cfgs: dict[str, DataConfigs]):
+        r"""
+        TODO: Support concat dataset for different dataset configs but same usage.
+
+        :param cfgs: {dataset_name: dataset_config}
+        """
+        self.data = cfgs
+        self.registered_dataset = cfgs.keys()
+
+    def get_dataset(self, name) -> Dataset:
+        if not name or name not in self.registered_dataset:
+            raise KeyError(f"Cannot find {name=} in registered datasets ({self.registered_dataset}).")
+        return self.data[name].dataset
+
+    def get_data_loader(
+        self,
+        name: str,
+        collate_fn: Callable[[tuple[dict[str, Any]]], dict[str, Any]] | None = None,
+    ) -> DataLoader:
+        if not name or name not in self.registered_dataset:
+            raise KeyError(f"Cannot find {name=} in registered datasets ({self.registered_dataset}).")
+        cfg = self.data[name]
+
+        sampler = DistributedSampler(cfg.dataset) if cfg.enable_ddp else None
+        loader = DataLoader(
+            dataset=cfg.dataset,
+            batch_size=cfg.batch_size,
+            num_workers=cfg.num_workers,
+            shuffle=sampler is None,
+            sampler=sampler,
+            collate_fn=collate_fn,
+        )
+
+        return loader
