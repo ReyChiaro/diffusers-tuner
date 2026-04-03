@@ -1,7 +1,4 @@
 from PIL import Image
-from typing import Any
-
-from data.data_utils import get_centercrop_params
 
 
 default_key_processor = lambda *args: args[0]
