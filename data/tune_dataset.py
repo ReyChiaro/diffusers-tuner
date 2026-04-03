@@ -83,6 +83,9 @@ class SchemaDataset(Dataset):
             normalized_post_processors.append(_resolve_callable(post_proc))
         return normalized_post_processors
 
+    def load_samples(self):
+        return [], 0
+
     def __len__(self) -> int:
         return self.num_samples
 
@@ -146,6 +149,8 @@ class TuneBucketDataset(SchemaDataset):
         # Load samples from data_file
         self.data_file = bucket_data_file
         self.data_file_type = bucket_data_file_type
+
+        self.samples, self.num_samples = self.load_samples()
 
     def load_samples(self) -> tuple[list[dict[str, Any]], int]:
         load_fn = getattr(
