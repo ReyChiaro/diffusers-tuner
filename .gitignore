@@ -1,5 +1,6 @@
 # Python-generated files
 __pycache__/
+.pycache/
 *.py[oc]
 build/
 dist/
@@ -10,6 +11,6 @@ wheels/
 .venv
 
 # Outputs files
-
+cache/
 outputs/
 *.zip
