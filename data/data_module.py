@@ -110,8 +110,6 @@ class TuneDataModule:
 
     def __init__(self, cfgs: dict[str, DataConfigs]):
         r"""
-        TODO: Support concat dataset for different dataset configs but same usage.
-
         :param cfgs: {dataset_name: dataset_config}
         """
         self.data = cfgs

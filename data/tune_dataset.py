@@ -1,36 +1,44 @@
-import json
-
+import random
 import importlib
-from torch.utils.data import Dataset
+
+from torch.utils.data import Dataset, Sampler
 from typing import Callable, Any, TypedDict, Annotated, Literal
 
 from data.key_processors import default_key_processor
 
 
-type DataFileFormat = Annotated[Literal["jsonl"], "Supported format for data file."]
+type DataFileFormat = Annotated[Literal["jsonl", "json"], "Supported format for data file."]
+type PostProcessor = Callable[[dict[str, Any], dict[str, Any], int], dict[str, Any] | None]
 
 
 class KeySchemaType(TypedDict):
     r"""
     Example: {
         "model_key": "image",
-        "data_key": ("imaeg_path_1", "image_path_2"),
-        "processor": ... # A function that maps "data_key" to "model_key"
+        "data_key": ("image_path_1", "image_path_2"),
+        "processor": <callable> # A function that maps "data_key" to "model_key",
     }
     """
 
     model_key: str
     data_key: str | tuple[str]
-    processor: str | Callable[[Any], Any] | None
+    processor: str | Callable[[Any], Any] | None = default_key_processor
 
 
-class TuneDataset(Dataset):
+def _resolve_callable(callable_or_path: str | Callable[..., Any]) -> Callable[..., Any]:
+    if isinstance(callable_or_path, str):
+        module_path = ".".join(callable_or_path.split(".")[:-1])
+        callable_name = callable_or_path.split(".")[-1]
+        return getattr(importlib.import_module(module_path), callable_name)
+    return callable_or_path
+
+
+class SchemaDataset(Dataset):
 
     def __init__(
         self,
         key_schemas: dict[str, KeySchemaType],
-        data_file: str,
-        data_file_type: DataFileFormat = "jsonl",
+        post_processors: list[str | PostProcessor] | None = None,
     ):
         r"""
         :param data_file: Lines of data samples, default JSONL format.
@@ -47,9 +55,7 @@ class TuneDataset(Dataset):
             if processor is None:
                 processor = default_key_processor
             elif isinstance(processor, str):
-                module_path = ".".join(processor.split(".")[:-1])
-                processor_name = processor.split(".")[-1]
-                processor = getattr(importlib.import_module(module_path), processor_name)
+                processor = _resolve_callable(processor)
             schema["processor"] = processor
 
             # Handle data key(s)
@@ -63,17 +69,19 @@ class TuneDataset(Dataset):
 
         # Keys passed to DataLoader
         self.model_keys = [s["model_key"] for s in self.key_schemas]
+        self.post_processors = self._normalize_post_processors(post_processors)
 
-        # Load samples from data_file
-        self.data_file_type = data_file_type
+    def _normalize_post_processors(
+        self,
+        post_processors: list[str | PostProcessor] | None,
+    ) -> list[PostProcessor]:
+        if post_processors is None:
+            return []
 
-        load_fn = getattr(
-            importlib.import_module("data.data_utils"),
-            f"load_{self.data_file_type}_file",
-        )
-        self.samples = load_fn(data_file)
-
-        self.num_samples = len(self.samples)
+        normalized_post_processors = []
+        for post_proc in post_processors:
+            normalized_post_processors.append(_resolve_callable(post_proc))
+        return normalized_post_processors
 
     def __len__(self) -> int:
         return self.num_samples
@@ -86,4 +94,132 @@ class TuneDataset(Dataset):
             model_key = schema["model_key"]
             return_dict[model_key] = schema["processor"](*[sample[dk] for dk in schema["data_key"]])
 
+        for post_proc in self.post_processors:
+            updated = post_proc(return_dict, sample, index)
+            if updated is not None:
+                return_dict = updated
+
         return return_dict
+
+
+class TuneDataset(SchemaDataset):
+
+    def __init__(
+        self,
+        key_schemas: dict[str, KeySchemaType],
+        data_file: str,
+        data_file_type: DataFileFormat = "jsonl",
+        post_processors: list[str | PostProcessor] | None = None,
+    ):
+        r"""
+        :param data_file: Lines of data samples, default JSONL format.
+        """
+        super().__init__(key_schemas, post_processors)
+
+        self.data_file = data_file
+        self.data_file_type = data_file_type
+        self.samples, self.num_samples = self.load_samples()
+
+    def load_samples(self) -> tuple[list[dict[str, Any]], int]:
+        # Load samples from data_file
+
+        load_fn = getattr(
+            importlib.import_module("data.data_utils"),
+            f"load_{self.data_file_type}_file",
+        )
+        samples = load_fn(self.data_file)
+        num_samples = len(samples)
+        return samples, num_samples
+
+
+class TuneBucketDataset(SchemaDataset):
+
+    def __init__(
+        self,
+        key_schemas: dict[str, KeySchemaType],
+        bucket_data_file: str,
+        bucket_data_file_type: DataFileFormat = "json",
+        post_processors: list[str | PostProcessor] | None = None,
+    ):
+        super().__init__(key_schemas, post_processors)
+
+        # Load samples from data_file
+        self.data_file = bucket_data_file
+        self.data_file_type = bucket_data_file_type
+
+    def load_samples(self) -> tuple[list[dict[str, Any]], int]:
+        load_fn = getattr(
+            importlib.import_module("data.data_utils"),
+            f"load_{self.data_file_type}_file",
+        )
+
+        # Bucket ID -> list of samples
+        bucket_samples = load_fn(self.data_file)
+
+        # Flattened samples
+        samples = []
+        buckets = {}
+
+        # Bucket ID -> sample index in flattened samples
+        s_idx = 0
+        for b_idx, b_samples in bucket_samples.items():
+            buckets[int(b_idx)] = []
+            for sample in b_samples:
+                samples.append(sample)
+                buckets[int(b_idx)].append(s_idx)
+                s_idx += 1
+
+        self.buckets = buckets
+        return samples, len(samples)
+
+
+class BucketBatchSampler(Sampler):
+    r"""
+    An accelerate compatible batch sampler, support DDP training.
+    Note that we should initialize accelerator with `dispatch_batches=False`.
+    """
+
+    def __init__(
+        self,
+        bucket_indices: dict[int, list[int]],
+        batch_size: int,
+        num_replicas: int = 1,
+        rank: int = 0,
+        drop_last: bool = False,
+        seed: int = 42,
+    ):
+        r"""
+        :param num_replicas (int, default 1): Set to `num_processes` or `ngpu`. Used to split
+            batches into different processes in DDP training.
+        """
+        self.bucket_indices = bucket_indices
+        self.batch_size = batch_size
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.seed = seed
+        self.drop_last = drop_last
+
+        self.batches = self._prepare_batches()
+
+    def _prepare_batches(self):
+        batches = []
+        for bid, sids in self.bucket_indices.items():
+            random.seed(self.seed)
+            random.shuffle(sids)
+
+            for i in range(0, len(sids), self.batch_size):
+                batch = sids[i : i + self.batch_size]
+                if len(batch) == self.batch_size or not self.drop_last:
+                    batches.append(batch)
+
+        random.seed(self.seed)
+        random.shuffle(batches)
+
+        return batches[self.rank :: self.num_replicas]
+
+    def __iter__(self):
+        for batch in self.batches:
+            yield batch
+
+    def __len__(self) -> int:
+        return len(self.batches)
