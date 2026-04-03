@@ -1,1 +1,0 @@
-from data.style_transfer_dataset import StyleTransferDataset

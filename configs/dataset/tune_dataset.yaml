@@ -1,0 +1,25 @@
+_target_: data.tune_dataset.TuneDataset
+
+data_file: ???
+data_file_type: jsonl # Options: jsonl, json
+key_schemas:
+  image:
+    model_key: image
+    data_key: image_path
+    processor: data.key_processors.load_pil_from_path
+  prompt:
+    model_key: prompt
+    data_key: prompt
+    processor: null
+  target:
+    model_key: target
+    data_key: target_path
+    processor: data.key_processors.load_pil_from_path
+
+post_processors:
+  - _target_: data.post_processors.PairedCenterCrop
+    image_key: image
+    target_key: target
+    aspect_ratio_key: target_aspect_ratio
+
+
