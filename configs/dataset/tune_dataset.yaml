@@ -1,25 +1,40 @@
-_target_: data.tune_dataset.TuneDataset
+_target_: data.tune_dataset.TuneBucketDataset
 
-data_file: ???
-data_file_type: jsonl # Options: jsonl, json
+bucket_data_file: ???
+bucket_data_file_type: json # Options: jsonl, json
 key_schemas:
-  image:
-    model_key: image
-    data_key: image_path
-    processor: data.key_processors.load_pil_from_path
-  prompt:
-    model_key: prompt
-    data_key: prompt
-    processor: null
-  target:
-    model_key: target
+  images:
+    model_key: images
+    data_key: ["image_path", "mask_path"]
+    processor: data.coco.key_processors.load_tensor_from_path
+  # prompt:
+  #   model_key: prompt
+  #   data_key: edit_action
+  #   processor: data.coco.key_processors.load_edit_prompt
+  prompt_embeds:
+    model_key: prompt_embeds
     data_key: target_path
-    processor: data.key_processors.load_pil_from_path
+    processor: null
+  prompt_embeds_mask:
+    model_key: prompt_embeds_mask
+    data_key: target_path
+    processor: null
+  targets:
+    model_key: targets
+    data_key: target_path
+    processor: data.coco.key_processors.load_tensor_from_path
 
 post_processors:
-  - _target_: data.post_processors.PairedCenterCrop
-    image_key: image
-    target_key: target
-    aspect_ratio_key: target_aspect_ratio
+
+  - _target_: data.coco.post_processors.PairedCenterCrop
+    model_image_key: images
+    model_target_key: targets
+    raw_aspect_ratio_key: target_aspect_ratio
+
+  - _target_: data.coco.post_processors.LoadPromptEmbeds
+    prompt_embeds_dir: ???
+    model_embeds_key: prompt_embeds
+    model_embeds_mask_key: prompt_embeds_mask
+    raw_target_path_key: target_path
 
 

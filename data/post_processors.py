@@ -23,6 +23,7 @@ class PairedCenterCrop:
         raw_sample: dict[str, Any],
         index: int,
     ) -> dict[str, Any]:
+        
         image = model_sample[self.model_image_key]
         target: torch.Tensor = model_sample[self.model_target_key]
 

@@ -34,8 +34,8 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
         prompt_embeds_mask = batch.get("prompt_embeds_mask", None)
         if images is None or targets is None:
             raise ValueError("`images` and `targets` are required for qwen-image-edit training.")
-        if not isinstance(images, list) or len(images) == 0:
-            raise ValueError("`images` should be a non-empty list of input image tensors.")
+        # if not isinstance(images, list) or len(images) == 0:
+        #     raise ValueError("`images` should be a non-empty list of input image tensors.")
         # Either raw prompts or pre-computed prompt latents are required.
         if prompts is None or prompts[0] is None:
             if prompt_embeds is None or prompt_embeds_mask is None:
@@ -54,6 +54,10 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
         if prompts is None or prompts[0] is None:
             if prompt_embeds is None or prompt_embeds_mask is None:
                 raise ValueError("Both prompts and pre-computed prompt latents are missing.")
+            if prompt_embeds.ndim == 2:
+                prompt_embeds = prompt_embeds.unsqueeze(0)
+            if prompt_embeds_mask.ndim == 3:
+                prompt_embeds_mask = prompt_embeds_mask.squeeze(0)
             return ConditionOutputs(
                 prompt_embeds=prompt_embeds.to(device=device),
                 prompt_embeds_mask=prompt_embeds_mask.to(device=device),
@@ -95,7 +99,7 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
         # 2. Tokenize
         model_inputs = pipeline.processor(
             text=prompts,
-            images=images,
+            images=condition_images,
             padding=True,
             return_tensors="pt",
         ).to(device)
@@ -141,7 +145,7 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
         target_h = targets[0].shape[-2] // multiple_of * multiple_of
         target_w = targets[0].shape[-1] // multiple_of * multiple_of
 
-        vae_target_w, vae_target_h = calculate_dimensions(vae_max_resolution, targets.shape[-1] / targets.shape[-2])
+        vae_target_w, vae_target_h = calculate_dimensions(vae_max_resolution, target_w / target_h)
         vae_targets = pipeline.image_processor.preprocess(
             image=targets,
             height=vae_target_h,
@@ -170,13 +174,13 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
             dtype=weight_dtype,
             generator=generator,
         )
-
+        eps_latents = eps_latents[:1]
         tgt_latents = img_latents[:batch_size]
         img_latents = img_latents[batch_size:]
 
         image_shapes = [
             [
-                (1, target_h // multiple_of, target_w // multiple_of),
+                (1, vae_target_h // multiple_of, vae_target_w // multiple_of),
                 (1, vae_h // multiple_of, vae_w // multiple_of),
                 (1, vae_h // multiple_of, vae_w // multiple_of),
             ]
@@ -239,11 +243,10 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
         sample_outputs: SampleOutputs = kwargs["sample_outputs"]
         attention_kwargs: dict[str, Any] = kwargs.get("attention_kwargs", {})
 
-        prompt_seq_lengths = condition_outputs.prompt_embeds_mask.sum(dim=1).tolist()
-
         B, L, C = latent_outputs.noise_latents.shape
-        condition_latents = latent_outputs.condition_latents.shape[0]
-        num_cond_per_target = condition_latents // B
+        num_conditions = latent_outputs.condition_latents.shape[0]
+        num_cond_per_target = num_conditions // B
+
         condition_latents = latent_outputs.condition_latents.view(num_cond_per_target, B, L, C)
         condition_latents = [condition_latents[i, ...] for i in range(num_cond_per_target)]
         latents = torch.cat([sample_outputs.noisy_latents] + condition_latents, dim=1)
@@ -254,7 +257,6 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
             encoder_hidden_states_mask=condition_outputs.prompt_embeds_mask,
             timestep=sample_outputs.timesteps / 1000,
             img_shapes=latent_outputs.others["image_shapes"],
-            txt_seq_lens=prompt_seq_lengths,
             attention_kwargs=attention_kwargs,
             return_dict=False,
         )[0]
@@ -267,9 +269,9 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
         latent_outputs: LatentOutputs = kwargs["latent_outputs"]
         sample_outputs: SampleOutputs = kwargs["sample_outputs"]
         timestep_weighting_scheme: str = kwargs.get("timestep_weighting_scheme", "logit_normal")
-        batch_size = target_v.shape[0]
 
         target_v = latent_outputs.noise_latents - latent_outputs.target_latents
+        batch_size = target_v.shape[0]
 
         loss_w = compute_loss_weighting_for_sd3(
             weighting_scheme=timestep_weighting_scheme,
@@ -290,15 +292,6 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
         device = pipeline.transformer.device
         weight_dtype = pipeline.transformer.dtype
 
-        # Handle multiple image conditions
-        images: list[torch.Tensor] | torch.Tensor = batch["image"]
-        if isinstance(images, torch.Tensor):
-            images = [images]
-
-        # Shape: (B * num_cond_per_target, C, H, W)
-        images = torch.cat(images, dim=0)
-        batch["image"] = images
-
         QwenImageEditPlusForwardHandler.check_inputs(pipeline, batch)
         condition_outputs = QwenImageEditPlusForwardHandler.encode_conditions(
             pipeline,
@@ -310,6 +303,7 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
             batch,
             device=device,
             weight_dtype=weight_dtype,
+            vae_max_resolution=480*480,
         )
         sample_outputs = QwenImageEditPlusForwardHandler.sample_latents(
             pipeline,

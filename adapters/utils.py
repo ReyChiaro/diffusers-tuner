@@ -67,7 +67,7 @@ class AdapterManager(nn.Module):
             alpha = configs.get("alpha") or rank
             scale = alpha / rank
 
-            A = self.lora_A[self.active_adapter]
+            A: torch.Tensor = self.lora_A[self.active_adapter]
             bias_A = self.bias_A[self.active_adapter] if self.active_adapter in self.bias_A else None
             B = self.lora_B[self.active_adapter]
             bias_B = self.bias_B[self.active_adapter] if self.active_adapter in self.bias_B else None

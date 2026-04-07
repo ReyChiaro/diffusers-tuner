@@ -1,6 +1,6 @@
-pretrained_model_name_or_path: "Qwen/Qwen-Image-Edit-2511"
-tune_modules: [
-  "transformer"
-]
+_target_: pipelines.pipeline_utils.PipelineConfigs
 
-load_text_encoder: false
+pretrained_model_name_or_path: "Qwen/Qwen-Image-Edit-2511"
+handler_name: pipelines.pipeline_qwenimage_edit_plus.QwenImageEditPlusForwardHandler
+tune_modules: [""]
+load_modules: ["scheduler", "processor", "tokenizer", "vae", "transformer", "text_encoder"]

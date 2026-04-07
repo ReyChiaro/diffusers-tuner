@@ -1,11 +1,8 @@
 _target_: adapters.utils.AdapterConfigs
 target_modules: [
-  "attn.to_q",
-  "attn.to_k",
-  "attn.to_v",
-  "attn.to_out.0",
+  "transformer_blocks.0.attn.to_q",
 ]
-rank: 16
-alpha: 16
+rank: 4
+alpha: null
 adapter_name: default_lora_adapter
 bias: false

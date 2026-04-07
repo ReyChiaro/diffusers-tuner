@@ -1,0 +1,43 @@
+_target_: data.tune_dataset.TuneBucketDataset
+
+bucket_data_file: ???
+bucket_data_file_type: json # Options: jsonl, json
+
+key_schemas:
+  image:
+    model_key: images
+    data_key: ["image_path", "mask_path"]
+    processor: data.coco.key_processors.load_tensor_from_path
+  prompt:
+    model_key: prompts
+    data_key: edit_action
+    processor: data.coco.key_processors.load_edit_prompt
+  target:
+    model_key: targets
+    data_key: target_path
+    processor: data.coco.key_processors.load_tensor_from_path
+  image_path:
+    model_key: image_paths
+    data_key: image_path
+    processor: null
+  target_path:
+    model_key: target_paths
+    data_key: target_path
+    processor: null
+
+post_processors:
+
+  - _target_: data.coco.post_processors.PairedCenterCrop
+    model_image_key: images
+    model_target_key: targets
+    raw_aspect_ratio_key: target_aspect_ratio
+
+  - _target_: data.coco.post_processors.ExtractEditMask
+    model_image_key: images
+    raw_segment_key: segments
+    raw_segment_id_key: id
+    raw_segment_area_key: area
+    raw_target_object_key: source_edit_object
+    raw_segment_class_key: class_name
+
+

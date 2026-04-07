@@ -176,10 +176,19 @@ class TunePipeline:
 
         module_dict = {
             m: AutoModel.from_pretrained(
-                self.pipe_configs.pretrained_model_name_or_path, subfolder=m, torch_dtype=self.weight_dtype
-            ).to(self.device)
+                self.pipe_configs.pretrained_model_name_or_path,
+                subfolder=m,
+                torch_dtype=self.weight_dtype,
+            )
             for m in self.pipe_configs.load_modules
         }
+        for n, m in module_dict.items():
+            if isinstance(m, torch.nn.Module) and hasattr(m, "to"):
+                logger.info(f"{n} to {self.device} with {self.weight_dtype}")
+                m.to(device=self.device, dtype=self.weight_dtype)
+            if isinstance(m, torch.nn.Module):
+                for p in m.parameters():
+                    p.requires_grad_(False)
 
         # Specify the pipeline
         model_index_file = Path(self.pipe_configs.pretrained_model_name_or_path) / "model_index.json"
@@ -256,10 +265,13 @@ class TunePipeline:
             activate_adapter(self.pipeline.components[module], adpt_configs.adapter_name)
 
         self.pipeline.to(device=device, dtype=weight_dtype)
-        for module in self.pipeline.components:
-            self.pipeline.components[module].load_state_dicts(adpt_state_dicts, strict=False)
-        
+        for module in self.pipeline.components and adpt_state_dicts:
+            if module not in tune_modules:
+                continue
+            self.pipeline.components[module].load_state_dict(adpt_state_dicts, strict=False)
+
         self.adpt_configs[adpt_configs.adapter_name] = adpt_configs
+
         return self.pipeline
 
     def __call__(self, batch: dict[str, Any]) -> ForwardOutputs:

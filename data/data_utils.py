@@ -69,15 +69,17 @@ def bucket_aspect_ratios(
 
     updated_samples = {i: [] for i in range(len(buckets))}
     for sample in tqdm(samples, desc="Bucket Classify"):
+        if not sample["is_align"]:
+            continue
         updated_sample = {}
         updated_sample.update(sample)
         target_path = sample["target_path"]
         target = Image.open(target_path).convert("RGB")
         ar_image = target.width / target.height
-        closest_bucket_idx = np.argmin(np.abs(ar_buckets - ar_image))
+        closest_bucket_idx = np.argmin(np.abs(ar_buckets - ar_image)).item()
         updated_sample["bucket"] = closest_bucket_idx
         updated_sample["target_aspect_ratio"] = buckets[closest_bucket_idx]
-        updated_samples[closest_bucket_idx] = updated_sample
+        updated_samples[closest_bucket_idx].append(updated_sample)
 
     with open(output_indices, "w") as f:
         json.dump(updated_samples, f, indent=2)

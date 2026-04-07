@@ -1,0 +1,36 @@
+defaults:
+  - dataset: tune_dataset
+  - dataset@data_cfgs: data_module
+  - adapter: lora
+  - loss: flow_matching
+  - pipeline: qwenimage_edit_plus
+  - _self_
+
+
+# Tuner
+tune:
+  _target_: diffusers_tuner.tuner.TuneConfigs
+  project_name: diffusers_pipeline_tuning
+  timestamp: ${now:%Y%m%d-%H%M%S}
+  output_dir: outputs/${tune.project_name}/${tune.timestamp}
+  log_dir: ${tune.output_dir}/logs
+  log_with: tensorboard # Options: wandb | tensorboard
+  log_per_rank: false
+  checkpoint_dir: ${tune.output_dir}/checkpoint
+  evaluation_dir: ${tune.output_dir}/evaluation
+  save_steps: 500
+  eval_steps: 500
+
+  random_seed: 42
+  max_tuning_steps: 10000
+  mixed_precision: bf16
+  grad_accumulate_steps: 1
+  max_grad_norm: 1.0
+
+  data_cfgs: ${data_cfgs}
+
+
+# Hydra
+hydra:
+  run:
+    dir: ${tune.output_dir}/hydra-configs

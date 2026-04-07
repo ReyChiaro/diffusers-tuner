@@ -11,6 +11,7 @@ dependencies = [
     "loguru>=0.7.3",
     "prodigyopt>=1.1.2",
     "safetensors>=0.7.0",
+    "tensorboard>=2.20.0",
     "torch>=2.10.0",
     "torchvision>=0.25.0",
     "transformers>=5.3.0",
