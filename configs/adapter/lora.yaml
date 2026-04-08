@@ -1,7 +1,5 @@
 _target_: adapters.utils.AdapterConfigs
-target_modules: [
-  "transformer_blocks.0.attn.to_q",
-]
+target_modules: [""]
 rank: 4
 alpha: null
 adapter_name: default_lora_adapter

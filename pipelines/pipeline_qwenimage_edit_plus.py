@@ -34,8 +34,6 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
         prompt_embeds_mask = batch.get("prompt_embeds_mask", None)
         if images is None or targets is None:
             raise ValueError("`images` and `targets` are required for qwen-image-edit training.")
-        # if not isinstance(images, list) or len(images) == 0:
-        #     raise ValueError("`images` should be a non-empty list of input image tensors.")
         # Either raw prompts or pre-computed prompt latents are required.
         if prompts is None or prompts[0] is None:
             if prompt_embeds is None or prompt_embeds_mask is None:

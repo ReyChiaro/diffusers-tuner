@@ -3,7 +3,7 @@ defaults:
   - dataset@data_cfgs: data_module
   - adapter: lora
   - loss: flow_matching
-  - pipeline: qwenimage_edit_plus
+  - pipeline: ???
   - _self_
 
 

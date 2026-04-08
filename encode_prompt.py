@@ -21,7 +21,7 @@ def tune(cfgs: OmegaConf):
 
     tuner_cfgs: TuneConfigs = instantiate(cfgs.tune)
     tuner = Tuner(tuner_cfgs)
-    tuner.prepare_prompt_embeds(pipeline, dataset, "prompt_embeds")
+    tuner.prepare_prompt_embeds(pipeline, dataset, cfgs.prompt_embeds_save_dir)
 
 
 if __name__ == "__main__":

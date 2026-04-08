@@ -1,6 +1,6 @@
 defaults:
   - adapter: lora
-  - pipeline: qwenimage_edit_plus
+  - pipeline: ???
   - _self_
 
 
