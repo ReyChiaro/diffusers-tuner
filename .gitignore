@@ -17,3 +17,5 @@ outputs/
 _[!_]*.py
 *.sh
 data/coco/
+configs/dataset/coco/
+README_zh.md

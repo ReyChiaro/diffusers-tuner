@@ -1,4 +1,4 @@
-# 🎨 Diffusers Tuner: A Lightweight, Configuration-Driven Fine-tuning Framework for 🤗 [diffusers](https://github.com/huggingface/diffusers)
+# 🎨 Diffusers Tuner: A Lightweight, Configuration-Driven, Flexible Fine-Tuning Framework for [🤗 Diffusers](https://github.com/huggingface/diffusers)
 
 Diffusers Tuner is designed to eliminate the overhead of fine-tuning diffusion models. Tired of rewriting training pipelines from scratch? Struggling with complex LoRA injections or messy configuration management?
 

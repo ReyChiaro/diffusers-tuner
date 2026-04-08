@@ -105,12 +105,14 @@ class FluxFillForwardHandler(ForwardHandler):
 
         packed_conditions = images.view(batch_size, num_cond_per_target, *images.shape[1:])
         source_images = packed_conditions[:, 0]
-        mask_images = packed_conditions[:, 1]
-        if mask_images.shape[1] != 1:
-            mask_images = mask_images[:, :1]
 
-        height = 2 * (int(targets.shape[-2]) // (pipeline.vae_scale_factor * 2))
-        width = 2 * (int(targets.shape[-1]) // (pipeline.vae_scale_factor * 2))
+        # NOTE: The highlighted part (mask=1) is to be editted.
+        # And FluxFill will multiply image with (1-mask)
+        # so we input 1-mask as the `mask` used in FluxFill
+        mask_images = 1.0 - packed_conditions[:, 1]
+
+        height = pipeline.vae_scale_factor * 2 * (int(targets.shape[-2]) // (pipeline.vae_scale_factor * 2))
+        width = pipeline.vae_scale_factor * 2 * (int(targets.shape[-1]) // (pipeline.vae_scale_factor * 2))
 
         source_images = pipeline.image_processor.preprocess(source_images, height=height, width=width).to(
             device=device, dtype=weight_dtype
@@ -128,8 +130,8 @@ class FluxFillForwardHandler(ForwardHandler):
             target_latents,
             batch_size=batch_size,
             num_channels_latents=num_channels_latents,
-            height=height,
-            width=width,
+            height=height // pipeline.vae_scale_factor,
+            width=width // pipeline.vae_scale_factor,
         )
 
         masked_images = source_images * (1 - mask_images)

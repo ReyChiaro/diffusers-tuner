@@ -116,7 +116,8 @@ def add_adapter(model: nn.Module, configs: AdapterConfigs, overwrite: bool = Fal
     rank: int = configs.rank
 
     for name, module in model.named_modules():
-        if not any(n in name for n in target_modules):
+        if not any(n in name.split(".") for n in target_modules):
+            print(f"{name} not add adapter.")
             continue
         if not isinstance(module, AdapterManager):
             continue
