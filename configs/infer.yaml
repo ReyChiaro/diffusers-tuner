@@ -1,0 +1,20 @@
+defaults:
+  - adapter: lora
+  - pipeline: qwenimage_edit_plus
+  - _self_
+
+
+# Tuner
+tune:
+  _target_: diffusers_tuner.tuner.TuneConfigs
+  project_name: diffusers_pipeline_inference
+  timestamp: ${now:%Y%m%d-%H%M%S}
+  output_dir: outputs/${tune.project_name}/${tune.timestamp}
+  log_dir: ${tune.output_dir}/logs
+  log_per_rank: false
+
+
+# Hydra
+hydra:
+  run:
+    dir: ${tune.output_dir}/hydra-configs

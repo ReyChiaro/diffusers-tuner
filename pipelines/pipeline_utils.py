@@ -254,10 +254,10 @@ class TunePipeline:
                     f"Adapter checkpoint unrecognized: {adpt_checkpoint}. "
                     + f"Supported file type: {_supported_file_types}"
                 )
-
-        for module in self.pipeline.components:
+        for module in self.pipeline.components.keys():
             if module not in tune_modules:
                 continue
+            logger.info(f"Add adapter in: {module}.")
             register_adapter(self.pipeline.components[module])
             add_adapter(self.pipeline.components[module], adpt_configs, overwrite=False)
             if requires_grad:
@@ -265,10 +265,24 @@ class TunePipeline:
             activate_adapter(self.pipeline.components[module], adpt_configs.adapter_name)
 
         self.pipeline.to(device=device, dtype=weight_dtype)
-        for module in self.pipeline.components and adpt_state_dicts:
-            if module not in tune_modules:
-                continue
-            self.pipeline.components[module].load_state_dict(adpt_state_dicts, strict=False)
+        if adpt_state_dicts:
+            for module in self.pipeline.components.keys():
+                if module not in tune_modules:
+                    continue
+                logger.info(f"Adapter checkpoint is found in {adpt_checkpoint}: Load to {module}.")
+
+                adpt_pn = set()
+                for n, p in adpt_state_dicts.items():
+                    if module in n and adpt_configs.adapter_name in n:
+                        adpt_pn.add(n)
+                module_pn = set()
+                for n, p in self.pipeline.components[module].named_parameters():
+                    if module in n and adpt_configs.adapter_name in n:
+                        module_pn.add(n)
+                loaded_pn = adpt_pn.intersection(module_pn)
+                logger.info(f"Adapter params: {len(adpt_pn)}, module params: {len(module_pn)}, loaded params: {len(loaded_pn)}")
+
+                self.pipeline.components[module].load_state_dict(adpt_state_dicts, strict=False)
 
         self.adpt_configs[adpt_configs.adapter_name] = adpt_configs
 

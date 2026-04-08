@@ -157,8 +157,10 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
         vae_w, vae_h = calculate_dimensions(vae_max_resolution, images.shape[-1] / images.shape[-2])
         vae_images = pipeline.image_processor.preprocess(
             image=images,
-            height=vae_h,
-            width=vae_w,
+            # height=vae_h,
+            # width=vae_w,
+            height=vae_target_h,
+            width=vae_target_w,
         ).unsqueeze(
             2
         )  # (B*num_cond_per_target,C,F,H,W)
@@ -303,7 +305,7 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
             batch,
             device=device,
             weight_dtype=weight_dtype,
-            vae_max_resolution=480*480,
+            vae_max_resolution=512 * 512,
         )
         sample_outputs = QwenImageEditPlusForwardHandler.sample_latents(
             pipeline,

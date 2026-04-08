@@ -375,7 +375,7 @@ class Tuner:
                     if global_steps % cfgs.save_steps == 0:
                         os.makedirs(cfgs.checkpoint_dir, exist_ok=True)
                         for module in pipeline.tune_modules:
-                            save_name = f"{module}-{adapter_name}.safetensors"
+                            save_name = f"{module}-{adapter_name}-step{global_steps:0{step_bits}d}.safetensors"
                             save_path = os.path.join(cfgs.checkpoint_dir, save_name)
 
                             state_dicts = {
