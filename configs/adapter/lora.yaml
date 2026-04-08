@@ -1,5 +1,5 @@
 _target_: adapters.utils.AdapterConfigs
-target_modules: [""]
+target_modules: []
 rank: 4
 alpha: null
 adapter_name: default_lora_adapter
