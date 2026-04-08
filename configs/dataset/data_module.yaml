@@ -2,7 +2,5 @@ tune_batch_size: 1
 tune_num_workers: 4
 eval_batch_size: 1
 eval_num_workers: 4
-
 drop_last: false
-
 enable_bucket_data: true

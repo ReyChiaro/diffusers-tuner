@@ -38,6 +38,7 @@ class SchemaDataset(Dataset):
     def __init__(
         self,
         key_schemas: dict[str, KeySchemaType],
+        collate_fn: str | None = None,
         post_processors: list[str | PostProcessor] | None = None,
     ):
         r"""
@@ -45,6 +46,7 @@ class SchemaDataset(Dataset):
         """
         super().__init__()
 
+        self.collate_fn = collate_fn
         key_schemas: list[KeySchemaType] = list(s for s in key_schemas.values())
         self.key_schemas: list[KeySchemaType] = []
         for _schema in key_schemas:
@@ -112,12 +114,13 @@ class TuneDataset(SchemaDataset):
         key_schemas: dict[str, KeySchemaType],
         data_file: str,
         data_file_type: DataFileFormat = "jsonl",
+        collate_fn: str | None = None,
         post_processors: list[str | PostProcessor] | None = None,
     ):
         r"""
         :param data_file: Lines of data samples, default JSONL format.
         """
-        super().__init__(key_schemas, post_processors)
+        super().__init__(key_schemas, collate_fn, post_processors)
 
         self.data_file = data_file
         self.data_file_type = data_file_type
@@ -142,9 +145,10 @@ class TuneBucketDataset(SchemaDataset):
         key_schemas: dict[str, KeySchemaType],
         bucket_data_file: str,
         bucket_data_file_type: DataFileFormat = "json",
+        collate_fn: str | None = None,
         post_processors: list[str | PostProcessor] | None = None,
     ):
-        super().__init__(key_schemas, post_processors)
+        super().__init__(key_schemas, collate_fn, post_processors)
 
         # Load samples from data_file
         self.data_file = bucket_data_file

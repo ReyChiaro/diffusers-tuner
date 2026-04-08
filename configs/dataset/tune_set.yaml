@@ -1,9 +1,0 @@
-_target_: data.StyleTransferDataset
-
-content_dir: ""
-style_dir: ""
-result_dir: ""
-image_height: 512
-image_width: 512
-requires_prompt: false
-prompt_latents_dir: ""

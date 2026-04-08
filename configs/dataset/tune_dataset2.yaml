@@ -3,6 +3,8 @@ _target_: data.tune_dataset.TuneBucketDataset
 bucket_data_file: ???
 bucket_data_file_type: json # Options: jsonl, json
 
+collate_fn: data.coco.collate_fns.flatten_image_collate_fn
+
 key_schemas:
   image:
     model_key: images

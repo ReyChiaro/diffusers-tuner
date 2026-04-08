@@ -12,7 +12,7 @@ from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration, DistributedDataParallelKwargs
 from hydra.utils import instantiate
 from safetensors.torch import save_file
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from loguru import logger
 from omegaconf import OmegaConf
 from pathlib import Path
@@ -27,8 +27,8 @@ from diffusers_tuner.tune_utils import (
     find_trainable_params,
 )
 from pipelines.pipeline_utils import TunePipeline, ForwardOutputs, ConditionOutputs
-from data.tune_dataset import BucketBatchSampler, TuneBucketDataset, TuneDataset
-from data.coco.collate_fns import flatten_image_collate_fn
+from data.tune_dataset import BucketBatchSampler, SchemaDataset, TuneBucketDataset
+from data.collate_fns import CollateFn
 
 
 @dataclasses.dataclass
@@ -102,7 +102,7 @@ class Tuner:
     def prepare_prompt_embeds(
         self,
         pipeline: TunePipeline,
-        dataset: Dataset,
+        dataset: SchemaDataset,
         prompt_embeds_save_dir: str,
     ):
         cfgs = copy.deepcopy(self.cfgs)
@@ -142,6 +142,7 @@ class Tuner:
         num_workers = self.cfgs.data_cfgs.get("tune_num_workers", 4)
         drop_last = self.cfgs.data_cfgs.get("drop_last", False)
         batch_sampler = None
+        collate_fn = CollateFn(dataset.collate_fn)
         if self.cfgs.data_cfgs.get("enable_bucket_data", False):
             assert isinstance(
                 dataset, TuneBucketDataset
@@ -159,7 +160,7 @@ class Tuner:
                 batch_sampler=batch_sampler,
                 num_workers=num_workers,
                 prefetch_factor=1,
-                collate_fn=flatten_image_collate_fn,
+                collate_fn=collate_fn,
             )
         else:
             data_loader = DataLoader(
@@ -168,7 +169,7 @@ class Tuner:
                 shuffle=True,
                 num_workers=num_workers,
                 drop_last=drop_last,
-                collate_fn=flatten_image_collate_fn,
+                collate_fn=collate_fn,
             )
         data_loader = accelerator.prepare(data_loader)
 
@@ -195,7 +196,7 @@ class Tuner:
     def evaluate_during_finetune(
         self,
         pipeline: TunePipeline,
-        evalset: Dataset,
+        evalset: SchemaDataset,
         device: torch.device,
         logger: logging.Logger,
         max_eval_num: int = 5,
@@ -245,8 +246,8 @@ class Tuner:
         self,
         pipeline: TunePipeline,
         adapter_name: str,
-        tuneset: Dataset,
-        evalset: Dataset | None = None,
+        tuneset: SchemaDataset,
+        evalset: SchemaDataset | None = None,
     ):
         cfgs = copy.deepcopy(self.cfgs)
 
@@ -286,6 +287,7 @@ class Tuner:
         tune_num_workers = self.cfgs.data_cfgs.get("tune_num_workers", 4)
         drop_last = self.cfgs.data_cfgs.get("drop_last", False)
         batch_sampler = None
+        collate_fn = CollateFn(tuneset.collate_fn)
         if self.cfgs.data_cfgs.get("enable_bucket_data", False):
             assert isinstance(
                 tuneset, TuneBucketDataset
@@ -303,7 +305,7 @@ class Tuner:
                 batch_sampler=batch_sampler,
                 num_workers=tune_num_workers,
                 prefetch_factor=1,
-                collate_fn=flatten_image_collate_fn,
+                collate_fn=collate_fn,
             )
         else:
             tune_loader = DataLoader(
@@ -312,7 +314,7 @@ class Tuner:
                 shuffle=True,
                 num_workers=tune_num_workers,
                 drop_last=drop_last,
-                collate_fn=flatten_image_collate_fn,
+                collate_fn=collate_fn,
             )
         tune_loader = accelerator.prepare(tune_loader)
         if evalset is not None:
