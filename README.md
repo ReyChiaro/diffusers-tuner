@@ -99,13 +99,188 @@ A simple yet effective structure helps to understand the core of our framework.
 
 
 ## Configurations
-> TODO
+
+This project is fully **Hydra-driven**, and all configurations live under `configs/`.
+You can compose configs by selecting groups and override any field from the CLI.
+
+### Config Groups
+
+- `pipeline`: Which diffusers pipeline to use and which components to load/tune.
+- `adapter`: LoRA configs (rank, target modules, adapter name, etc.).
+- `dataset`: Dataset schema and collate function definition.
+- `loss`: Loss choice.
+- `tune`: Training configuration.
+
+### Common Overrides
+
+```sh
+# Pipeline selection and module control
+pipeline=qwenimage_edit_plus \
+"pipeline.load_modules=[scheduler,processor,tokenizer,vae,transformer,text_encoder]" \
+"pipeline.tune_modules=[transformer]" \
+
+# Adapter controls
+adapter=lora \
+adapter.rank=32 \
+"adapter.target_modules=[attn.to_q,attn.to_k,attn.to_v]" \
+adapter.adapter_name=my_lora \
+
+# Training controls
+tune.max_tuning_steps=1000 \
+tune.save_steps=100 \
+tune.eval_steps=100 \
+tune.mixed_precision=bf16 \
+
+# Dataset and data loader
+dataset=dummy \
+dataset.data_file=/path/to/your/data.json \
+data.tune_batch_size=1 \
+data.tune_num_workers=4
+```
+
+
+## Framework Architecture
+
+The design separates **pipeline logic**, **training loop**, and **data schema**, so you can swap
+components without totally rewriting training code (in fact, you should also code some forward logic by inheriting the forward handler).
+
+### Forward Handler
+
+Each pipeline has a matching **ForwardHandler** that defines the training-time logic:
+
+- `encode_conditions`: prompts or precomputed embeddings
+- `encode_latents`: image/target to latent space
+- `sample_latents`: diffusion timestep sampling
+- `denoise_forward`: model forward pass
+- `criterion_fn`: loss calculation
+- `forward_step`: composition of the above
+
+This keeps training logic pipeline-specific but **API-consistent** across models.
+
+### Lightweight Adapter System
+
+Adapters are implemented in `adapters/utils.py`:
+
+- `register_adapter`: wraps `nn.Linear` as `AdapterManager`
+- `add_adapter`: adds LoRA params to matched modules
+- `activate_adapter(s)`: choose which adapter(s) to apply in forward
+- `enable_adapter`: toggles training (`requires_grad`) only
+
+This makes adapter activation independent from training, and supports multi-adapter mixing
+by weights.
+
+> To be honest, I usually fails to fine-tune my model with `peft` in `diffusers`... So I make the fine-tune adapter simpler to help me clearify what is really going on.
+
+### Tuner Engine
+
+`diffusers_tuner/tuner.py` wraps **Accelerate** and exposes:
+
+- Full DDP-compatible training loop
+- Optional evaluation hooks
+- Safe checkpoint saving for adapter weights
+
+The trainer takes any `TunePipeline` + `DatasetSchema` pair and runs end-to-end.
+
+
+## Detailed Usage
+
+### Training
+
+The main entry is `tune.py`. The compulsive configurations are `pipeline` and `dataset`, you should always provide the two fields to start a fine-tuning task (But note that the adapter tuning modules are empty be default, maybe you shoud pass some modules to it).
+
+```sh
+accelerate launch tune.py pipeline=qwenimage_edit_plus dataset=dummy
+```
+
+### Inference
+
+Use `inference.py` and provide `adpt_checkpoint`:
+
+```sh
+python inference.py \
+    pipeline=qwenimage_edit_plus \
+    adapter=lora \
+    "adapter.target_modules=[attn.to_q,attn.to_k,attn.to_v]" \
+    +adpt_checkpoint=/path/to/your.safetensors \
+    +prompt="A cinematic scene of a robot painter"
+```
+
+### Multi-Adapter Merge
+
+You can load multiple adapters and activate them with weights:
+
+```python
+from adapters.utils import activate_adapters
+
+activate_adapters(
+    model,
+    {"style_a": 1.0, "style_b": 0.6},
+    clear_others=True,
+)
+```
+
+### Dataset Format
+
+The `dataset` config defines a **schema** that maps your JSON fields to model inputs.
+
+Example (simplified):
+
+```yaml
+key_schemas:
+  images:
+    data_key: ["image","mask"]
+    key_processor: null
+  prompts:
+    data_key: "prompt"
+    key_processor: null
+  targets:
+    data_key: "target"
+    key_processor: null
+collate_fn: null
+```
+
+The `key_processor` and `collate_fn` are default or self-defined methods.
+
+- key processor: Used to load JSON dataset, convert data keys in data file to model keys in batch,
+- collate function: Used to post-process the data in batch level.
+
+For a custom dataset, you can create a folder named `my_custom_dataset` (or anything you like) under `data` folder, and then define your collate functions and key processors in there. Finally, you can use these custom methods by filling the configurations:
+
+```yaml
+key_processor: my_custom_dataset.custom_key_processor
+collate_fn: my_custom_dataset.custom_collate_fn
+```
+
+### Bucket Dataset
+
+A bucket dataset helps to batch your training data especially for different aspect ratios.
+If `bucket_dataset: true` is set, your `data_file` should be a JSON object:
+
+```json
+{
+  "0": { "aspect_ratio": [1, 1], "dataset": [ ... ] },
+  "1": { "aspect_ratio": [3, 4], "dataset": [ ... ] },
+  "2": { "aspect_ratio": [9, 16], "dataset": [ ... ] }
+}
+```
+
+Each item in `dataset` is a normal sample. The default `collate_fn` can resize to the bucket size.
+
 
 ## Memory Saving
-> TODO
 
-### Offload text encoder
-> TODO
+Large image-edit pipelines are GPU-hungry. The framework provides a few built-in options:
+
+- **Offload text encoder** and precompute prompt embeddings
+- **Only load required modules** in `pipeline.load_modules`
+- **Use bf16** mixed precision
+
+### Recommended Strategy
+
+1. Precompute prompt embeddings with `encode_prompt.py`
+2. Remove `text_encoder` from `pipeline.load_modules`
+3. Feed `prompt_embeds` + `prompt_embeds_mask` during training (Note that you can modify the data configuration to achieve this feature)
+
 
 ## 📝 Roadmap
 
