@@ -27,8 +27,7 @@ from diffusers_tuner.tune_utils import (
     find_trainable_params,
 )
 from pipelines.pipeline_utils import TunePipeline, ForwardOutputs, ConditionOutputs
-from data.tune_dataset import BucketBatchSampler, SchemaDataset, TuneBucketDataset
-from data.collate_fns import CollateFn
+from data.tune_dataset import BucketBatchSampler, DatasetSchema, DiffusersTunerDataset
 
 
 @dataclasses.dataclass
@@ -102,7 +101,7 @@ class Tuner:
     def prepare_prompt_embeds(
         self,
         pipeline: TunePipeline,
-        dataset: SchemaDataset,
+        dataset: DatasetSchema,
         prompt_embeds_save_dir: str,
     ):
         cfgs = copy.deepcopy(self.cfgs)
@@ -142,10 +141,10 @@ class Tuner:
         num_workers = self.cfgs.data_cfgs.get("tune_num_workers", 4)
         drop_last = self.cfgs.data_cfgs.get("drop_last", False)
         batch_sampler = None
-        collate_fn = CollateFn(dataset.collate_fn)
+        collate_fn = dataset.collate_fn
         if self.cfgs.data_cfgs.get("enable_bucket_data", False):
             assert isinstance(
-                dataset, TuneBucketDataset
+                dataset, DiffusersTunerDataset
             ), f"Bucket datset is enabled, dataset should be TuneBucketDataset."
             batch_sampler = BucketBatchSampler(
                 bucket_indices=dataset.buckets,
@@ -196,7 +195,7 @@ class Tuner:
     def evaluate_during_finetune(
         self,
         pipeline: TunePipeline,
-        evalset: SchemaDataset,
+        evalset: DatasetSchema,
         device: torch.device,
         logger: logging.Logger,
         max_eval_num: int = 5,
@@ -246,8 +245,8 @@ class Tuner:
         self,
         pipeline: TunePipeline,
         adapter_name: str,
-        tuneset: SchemaDataset,
-        evalset: SchemaDataset | None = None,
+        tuneset: DatasetSchema,
+        evalset: DatasetSchema | None = None,
     ):
         cfgs = copy.deepcopy(self.cfgs)
 
@@ -287,10 +286,10 @@ class Tuner:
         tune_num_workers = self.cfgs.data_cfgs.get("tune_num_workers", 4)
         drop_last = self.cfgs.data_cfgs.get("drop_last", False)
         batch_sampler = None
-        collate_fn = CollateFn(tuneset.collate_fn)
+        collate_fn = tuneset.collate_fn
         if self.cfgs.data_cfgs.get("enable_bucket_data", False):
             assert isinstance(
-                tuneset, TuneBucketDataset
+                tuneset, DiffusersTunerDataset
             ), f"Bucket datset is enabled, dataset should be TuneBucketDataset."
             batch_sampler = BucketBatchSampler(
                 bucket_indices=tuneset.buckets,

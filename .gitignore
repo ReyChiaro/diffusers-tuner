@@ -11,11 +11,11 @@ wheels/
 .venv
 
 # Outputs files
+coco/
+
 cache/
 outputs/
 *.zip
 _[!_]*.py
 *.sh
-data/coco/
-configs/dataset/coco/
 README_zh.md

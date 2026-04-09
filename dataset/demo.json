@@ -1,0 +1,8 @@
+[
+    {
+        "image1": "path/to/image1.jpg",
+        "image2": "path/to/image2.jpg",
+        "prompt": "user prompt",
+        "target": "path/to/target.jpg"
+    }
+]
