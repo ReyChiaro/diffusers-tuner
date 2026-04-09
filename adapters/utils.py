@@ -20,7 +20,7 @@ class AdapterConfigs:
     rank: int = DEFAULT_RANK
     alpha: Optional[int] = None
     adapter_name: str = DEFAULT_NAME
-    target_modules: list[str] = field(default_factory=[])
+    target_modules: list[str] = field(default_factory=list)
     bias: bool = False
 
 
@@ -137,17 +137,31 @@ def add_adapter(model: nn.Module, configs: AdapterConfigs, overwrite: bool = Fal
         # In fact, more initialization methods can be provided via method args
         # and macro definitions. Here we use the normal gaussian and zero init method
         # by default, which is also used in `peft`.
-        module.lora_A[adapter_name] = nn.Parameter(torch.empty(rank, in_features), requires_grad=False)
-        module.lora_B[adapter_name] = nn.Parameter(torch.empty(out_features, rank), requires_grad=False)
+        device = module.base_model.weight.device
+        dtype = module.base_model.weight.dtype
+        module.lora_A[adapter_name] = nn.Parameter(
+            torch.empty(rank, in_features, device=device, dtype=dtype),
+            requires_grad=False,
+        )
+        module.lora_B[adapter_name] = nn.Parameter(
+            torch.empty(out_features, rank, device=device, dtype=dtype),
+            requires_grad=False,
+        )
         nn.init.normal_(module.lora_A[adapter_name], mean=0, std=0.02)
         nn.init.zeros_(module.lora_B[adapter_name])
 
         if configs.bias:
-            module.bias_A[adapter_name] = nn.Parameter(torch.empty(rank), requires_grad=False)
+            module.bias_A[adapter_name] = nn.Parameter(
+                torch.empty(rank, device=device, dtype=dtype),
+                requires_grad=False,
+            )
             init_bias_A = 1 / math.sqrt(rank)
             nn.init.uniform_(module.bias_A[adapter_name], -init_bias_A, init_bias_A)
 
-            module.bias_B[adapter_name] = nn.Parameter(torch.empty(out_features), requires_grad=False)
+            module.bias_B[adapter_name] = nn.Parameter(
+                torch.empty(out_features, device=device, dtype=dtype),
+                requires_grad=False,
+            )
             nn.init.zeros_(module.bias_B[adapter_name])
 
         # Update the config of this module's adapter

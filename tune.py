@@ -9,7 +9,7 @@ from diffusers_tuner.tuner import TuneConfigs, Tuner
 from pipelines.pipeline_utils import PipelineConfigs, TunePipeline
 
 
-@hydra.main(config_path="configs", config_name="test.yaml", version_base="v1.2")
+@hydra.main(config_path="configs", config_name="tune.yaml", version_base="v1.2")
 def tune(cfgs: OmegaConf):
 
     dataset: Dataset = instantiate(cfgs.dataset)
