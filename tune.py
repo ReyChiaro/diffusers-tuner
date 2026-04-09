@@ -12,6 +12,7 @@ from pipelines.pipeline_utils import PipelineConfigs, TunePipeline
 @hydra.main(config_path="configs", config_name="tune.yaml", version_base="v1.2")
 def tune(cfgs: OmegaConf):
 
+    print(OmegaConf.to_yaml(cfgs))
     dataset: Dataset = instantiate(cfgs.dataset)
 
     pipe_cfgs: PipelineConfigs = instantiate(cfgs.pipeline)

@@ -1,10 +1,19 @@
 defaults:
-  - dataset: tune_dataset
-  - dataset@data_cfgs: data_module
   - adapter: lora
   - loss: flow_matching
   - pipeline: ???
+  - dataset: ???
   - _self_
+
+
+# Data common configs
+data:
+  tune_batch_size: 1
+  tune_num_workers: 4
+  eval_batch_size: 1
+  eval_num_workers: 4
+  drop_last: false
+  enable_bucket_data: true
 
 
 # Tuner
@@ -27,7 +36,7 @@ tune:
   grad_accumulate_steps: 1
   max_grad_norm: 1.0
 
-  data_cfgs: ${data_cfgs}
+  data_cfgs: ${data}
 
 
 # Hydra

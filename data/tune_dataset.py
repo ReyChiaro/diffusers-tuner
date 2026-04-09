@@ -5,7 +5,6 @@ from torch.utils.data import Dataset, Sampler
 from typing import Callable, Any, TypedDict, Annotated, Literal
 
 from loguru import logger
-from data.key_processors import default_key_processor
 from data.data_utils import load_json_file
 
 type DataFileFormat = Annotated[Literal["jsonl", "json"], "Supported format for data file."]
@@ -23,7 +22,7 @@ class KeySchemaType(TypedDict):
 
     model_key: str
     data_key: str | tuple[str]
-    processor: str | Callable[[Any], Any] | None = default_key_processor
+    processor: str | Callable[[Any], Any] | None = None
 
 
 def _resolve_callable(callable_or_path: str | Callable[..., Any]) -> Callable[..., Any]:
@@ -56,7 +55,7 @@ class SchemaDataset(Dataset):
             # Handle key processor
             processor = _schema.get("processor", None)
             if processor is None:
-                processor = default_key_processor
+                processor = None
             elif isinstance(processor, str):
                 processor = _resolve_callable(processor)
             schema["processor"] = processor
@@ -196,6 +195,7 @@ class DatasetSchema(Dataset):
 
         self.data_file = data_file
         self.model_keys = list(key_schemas.keys())
+
         self.schema = {
             mk: {
                 "data_key": key_schemas[mk]["data_key"],
@@ -204,7 +204,6 @@ class DatasetSchema(Dataset):
             for mk in self.model_keys
         }
         self.collate_fn = self._instantiate_collate_fn(collate_fn)
-        self.samples, self.num_samples = self.load_samples()
 
     def _instantiate_key_processor(self, key_processor: str | None) -> Callable[[Any], Any]:
         r"""
@@ -228,7 +227,7 @@ class DatasetSchema(Dataset):
         :param collate_fn: Format of collate_fn is `<data_module>.<collate_fn>`.
             Then this method will import the collate function from data.<data_module>.collate_fns.<collate_fn> and return it.
         """
-        if collate_fn is None:
+        if not collate_fn:
             return None
 
         data_module = collate_fn.split(".")[0]
@@ -264,9 +263,11 @@ class DiffusersTunerDataset(DatasetSchema):
         r"""
         :param bucket_dataset (bool): Default: False
         """
-        super().__init__(data_file, key_schemas, collate_fn)
         self.bucket_dataset = bucket_dataset
         self.buckets = None
+
+        super().__init__(data_file, key_schemas, collate_fn)
+        self.samples, self.num_samples = self.load_samples()
 
     def load_samples(self):
         r"""
@@ -293,6 +294,7 @@ class DiffusersTunerDataset(DatasetSchema):
             self.buckets = buckets
         else:
             samples = load_json_file(self.data_file)
+        print(samples)
         return samples, len(samples)
 
 

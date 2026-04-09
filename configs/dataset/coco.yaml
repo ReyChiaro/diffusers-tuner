@@ -1,0 +1,25 @@
+_target_: data.tune_dataset.DiffusersTunerDataset
+
+data_file: ???
+
+# key_processors are used for reading data from data file and defines the initial model items
+# if null, it will use default processors.
+# data_key -> model_key
+key_schemas:
+  images:
+    data_key: ["image","mask"]
+    key_processor: null
+  prompts:
+    data_key: "prompt"
+    key_processor: null
+  targets:
+    data_key: "target"
+    key_processor: null
+
+# collate_fn provides a post processes on batch-view and only processes model keys.
+# for example, following collate functions will first resize images and targets into
+# save sizes and then flatten the input images into a single list and concatenate 
+# them on batch dim (tensor shape [B*img_per_sample,C,H,W]).
+# model_key only
+collate_fn: coco.flatten_and_resize
+bucket_dataset: false

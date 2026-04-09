@@ -142,7 +142,7 @@ class Tuner:
         drop_last = self.cfgs.data_cfgs.get("drop_last", False)
         batch_sampler = None
         collate_fn = dataset.collate_fn
-        if self.cfgs.data_cfgs.get("enable_bucket_data", False):
+        if getattr(dataset, "bucket_dataset", False):
             assert isinstance(
                 dataset, DiffusersTunerDataset
             ), f"Bucket datset is enabled, dataset should be TuneBucketDataset."
@@ -287,7 +287,7 @@ class Tuner:
         drop_last = self.cfgs.data_cfgs.get("drop_last", False)
         batch_sampler = None
         collate_fn = tuneset.collate_fn
-        if self.cfgs.data_cfgs.get("enable_bucket_data", False):
+        if getattr(tuneset, "bucket_dataset", False):
             assert isinstance(
                 tuneset, DiffusersTunerDataset
             ), f"Bucket datset is enabled, dataset should be TuneBucketDataset."
@@ -342,13 +342,13 @@ class Tuner:
 
         for epoch in range(num_epochs):
             for batch in tune_loader:
-                batch["images"] = batch["images"].to(dtype=weight_dtype)
-                batch["targets"] = batch["targets"].to(dtype=weight_dtype)
-                batch["prompt_embeds"] = batch["prompt_embeds"].to(dtype=weight_dtype)
+                # batch["images"] = batch["images"].to(dtype=weight_dtype)
+                # batch["targets"] = batch["targets"].to(dtype=weight_dtype)
+                # batch["prompt_embeds"] = batch["prompt_embeds"].to(dtype=weight_dtype)
                 # ---- Forward and Backward ---- #
                 with accelerator.accumulate(*accumulate_modules):
-                    # with accelerator.autocast():
-                    step_outputs: ForwardOutputs = pipeline(batch)
+                    with accelerator.autocast():
+                        step_outputs: ForwardOutputs = pipeline(batch)
                     loss = step_outputs.loss
                     avg_step_loss.append(loss.cpu().item())
                     accelerator.backward(loss)

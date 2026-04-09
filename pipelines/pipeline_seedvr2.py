@@ -1,0 +1,1 @@
+from diffusers.pipelines.qwenimage.pipeline_qwenimage import QwenImagePipeline
