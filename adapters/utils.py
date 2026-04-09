@@ -57,27 +57,37 @@ class AdapterManager(nn.Module):
 
         # Record the activated adapter name
         self.active_adapter: str = ""
+        # Multiple active adapters with optional weights
+        self.active_adapters: Dict[str, float] = {}
 
     def forward(self, x: Tensor):
         out = self.base_model(x)
 
-        if self.active_adapter and self.adapter_info[self.active_adapter]["is_enable"]:
-            configs = self.adapter_info[self.active_adapter]["configs"]
-            rank = configs.get("rank", DEFAULT_RANK)
-            alpha = configs.get("alpha") or rank
-            scale = alpha / rank
+        if self.active_adapters:
+            for name, weight in self.active_adapters.items():
+                if name not in self.adapter_info:
+                    continue
+                if not self.adapter_info[name].get("is_active", False):
+                    continue
+                if name not in self.lora_A or name not in self.lora_B:
+                    continue
 
-            A: torch.Tensor = self.lora_A[self.active_adapter]
-            bias_A = self.bias_A[self.active_adapter] if self.active_adapter in self.bias_A else None
-            B = self.lora_B[self.active_adapter]
-            bias_B = self.bias_B[self.active_adapter] if self.active_adapter in self.bias_B else None
+                configs = self.adapter_info[name]["configs"]
+                rank = configs.get("rank", DEFAULT_RANK)
+                alpha = configs.get("alpha") or rank
+                scale = (alpha / rank) * float(weight)
 
-            # Use F.linear to avoid explicit transpose matmul and large temporary tensor.
-            # IMPORTANT: do not scale x first (i.e. `scale * x @ A.T`), which creates an
-            # extra tensor with the same shape as x and can trigger OOM.
-            ada_out = F.linear(x, A, bias_A)
-            ada_out = F.linear(ada_out, B, bias_B)
-            out = out + ada_out * scale
+                A: torch.Tensor = self.lora_A[name]
+                bias_A = self.bias_A[name] if name in self.bias_A else None
+                B = self.lora_B[name]
+                bias_B = self.bias_B[name] if name in self.bias_B else None
+
+                # Use F.linear to avoid explicit transpose matmul and large temporary tensor.
+                # IMPORTANT: do not scale x first (i.e. `scale * x @ A.T`), which creates an
+                # extra tensor with the same shape as x and can trigger OOM.
+                ada_out = F.linear(x, A, bias_A)
+                ada_out = F.linear(ada_out, B, bias_B)
+                out = out + ada_out * scale
         return out
 
 
@@ -223,7 +233,41 @@ def activate_adapter(model: nn.Module, name: str):
             continue
 
         module.active_adapter = name
+        module.active_adapters[name] = 1.0
         module.adapter_info[name]["is_active"] = True
+
+
+def activate_adapters(model: nn.Module, names_and_scales: Dict[str, float], clear_others: bool = False):
+    r"""
+    Activate multiple adapters with optional scales.
+    :param names_and_scales: dict of adapter_name -> scale.
+    :param clear_others: whether to clear existing active adapters first.
+    """
+    for _, module in model.named_modules():
+        if not isinstance(module, AdapterManager):
+            continue
+
+        if clear_others:
+            module.active_adapters = {}
+            for n in module.adapter_info:
+                module.adapter_info[n]["is_active"] = False
+
+        for name, scale in names_and_scales.items():
+            if name not in module.adapter_info:
+                continue
+            module.active_adapter = name
+            module.active_adapters[name] = float(scale)
+            module.adapter_info[name]["is_active"] = True
+
+
+def set_adapter_scale(model: nn.Module, name: str, scale: float):
+    r"""Set scale for an already activated adapter."""
+    for _, module in model.named_modules():
+        if not isinstance(module, AdapterManager):
+            continue
+        if name not in module.active_adapters:
+            continue
+        module.active_adapters[name] = float(scale)
 
 
 def deactivate_adapter(model: nn.Module, name: str):
@@ -233,5 +277,17 @@ def deactivate_adapter(model: nn.Module, name: str):
         if not name in module.adapter_info:
             continue
 
-        module.active_adapter = ""
+        module.active_adapters.pop(name, None)
+        if module.active_adapter == name:
+            module.active_adapter = ""
         module.adapter_info[name]["is_active"] = False
+
+
+def deactivate_all_adapters(model: nn.Module):
+    for _, module in model.named_modules():
+        if not isinstance(module, AdapterManager):
+            continue
+        module.active_adapter = ""
+        module.active_adapters = {}
+        for n in module.adapter_info:
+            module.adapter_info[n]["is_active"] = False

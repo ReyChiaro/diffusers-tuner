@@ -58,13 +58,14 @@ accelerate launch \
     tune.eval_steps 5 \
     tune.mixed_precision bf16 \
     pipeline=qwenimage_edit_plus \
-    "pipeline.load_modules=[scheduler,processor,tokenizer,vae,transformer,text_encoder \
+    "pipeline.load_modules=[scheduler,processor,tokenizer,vae,transformer,text_encoder]" \
     "pipeline.tune_modules=[transformer]" \
     adapter=lora \
     adapter.rank=32 \
     "adapter.target_modules=[attn.to_q,attn.to_k,attn.to_v]" \
     data_cfgs.tune_batch_size=1 \
     data_cfgs.enable_bucket_data=ture \
+    dataset=dummy \
 ```
 
 After doing this, you will see there is a new folder named `outputs` where there is a subfolder named by `tune.project_name`. For each time running the same experiment with same project name, it will create a subfolder named by the timestamp. If you want to recover a configuration of former experiments, check `<output_dir>/<project_name>/<timestamp>/hydra-configs/config.yaml` and just run following lines to use the same configurations to start a experiment. (You can check [Hydra](https://hydra.cc/) for more fancy usages.)
