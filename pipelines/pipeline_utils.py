@@ -246,7 +246,7 @@ class TunePipeline:
                 _ckpt_type = adpt_checkpoint.suffix.split(".")[-1]
                 adpt_state_dicts: dict[str, torch.Tensor] = (
                     torch.load(adpt_checkpoint, map_location=device, weights_only=True)
-                    if _ckpt_type == ".pth"
+                    if _ckpt_type == "pth"
                     else load_file(adpt_checkpoint, device=device)
                 )
             else:

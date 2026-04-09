@@ -16,5 +16,5 @@ def default_processor(**kwargs) -> str | Image.Image | list[str | Image.Image]:
             v = Image.open(dv).convert("RGB")
             return_list.append(v)
         else:
-            return_list.append(v)
+            return_list.append(dv)
     return return_list
