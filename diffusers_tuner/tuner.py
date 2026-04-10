@@ -269,9 +269,6 @@ class Tuner:
             local_rank=accelerator.local_process_index,
         )
 
-        log_title = "=" * 20 + " Configs " + "=" * 20
-        logger.info(f"\n{log_title}\n{yaml.dump(dataclasses.asdict(cfgs))}\n{'=' * len(log_title)}")
-
         requires_eval = evalset is not None
 
         device = accelerator.device
@@ -315,11 +312,15 @@ class Tuner:
                 drop_last=drop_last,
                 collate_fn=collate_fn,
             )
-        
+
         # Accelerator may change the length of loader, we should re-calculate steps
         tune_loader = accelerator.prepare(tune_loader)
         num_tune_samples = len(tune_loader) * tune_batch_size
-        num_epochs = math.ceil(cfgs.max_tuning_steps / num_tune_samples)
+        max_tuning_steps = math.ceil(cfgs.max_tuning_steps / tune_batch_size)
+        save_steps = math.ceil(cfgs.save_steps / tune_batch_size)
+        eval_steps = math.ceil(cfgs.eval_steps / tune_batch_size)
+        num_epochs = math.ceil(max_tuning_steps * tune_batch_size / num_tune_samples)
+        step_info = f"{num_tune_samples=}\n{tune_batch_size=}\n{max_tuning_steps=}\n{save_steps=}\n{eval_steps=}\n{num_epochs=}"
 
         # ---- Pipeline preparation ---- #
         pipeline.pipeline.to(device=device, dtype=weight_dtype)
@@ -328,8 +329,11 @@ class Tuner:
 
         summary = summarize_pipeline(pipeline.pipeline)
         log_title = "-" * 20 + " Summary " + "-" * 20
-        summary_str = "\n".join(f"{k}: {v}" for k, v in summary.items())
-        logger.info(f"\n{log_title}\n{summary_str}\n{'-' * len(log_title)}")
+        log_split = list("-" * len(log_title))
+        log_split[1::2] = ["~"] * len(log_split[1::2])
+        log_split = "".join(log_split)
+        summary_info = "\n".join(f"{k}: {v}" for k, v in summary.items())
+        logger.info(f"\n{log_title}\n{summary_info}\n{log_split}\n{step_info}\n{'-' * len(log_title)}")
 
         # ---- Optimizer and Scheduler (Optional) preparation ---- #
         optimizer = Prodigy(params=trainable_params)
@@ -338,15 +342,16 @@ class Tuner:
         # ---- Start Finetune ---- #
         global_steps = 0
         avg_step_loss = []
-        step_bits = len(str(cfgs.max_tuning_steps))
+        step_bits = len(str(max_tuning_steps))
 
         for epoch in range(num_epochs):
             for batch in tune_loader:
-    
+                batch["targets"] = batch["targets"].to(torch.bfloat16)
+                batch["images"] = batch["images"].to(torch.bfloat16)
                 # ---- Forward and Backward ---- #
                 with accelerator.accumulate(*accumulate_modules):
-                    with accelerator.autocast():
-                        step_outputs: ForwardOutputs = pipeline(batch)
+                    # with accelerator.autocast():
+                    step_outputs: ForwardOutputs = pipeline(batch)
                     loss = step_outputs.loss
                     avg_step_loss.append(loss.cpu().item())
                     accelerator.backward(loss)
@@ -365,13 +370,11 @@ class Tuner:
                     avg_step_loss = sum(avg_step_loss) / len(avg_step_loss)
                     accelerator.log({"loss": avg_step_loss}, step=global_steps)
 
-                    logger.info(
-                        f"Tune Step [{global_steps:0{step_bits}d}/{cfgs.max_tuning_steps}] Loss {avg_step_loss:.6f}"
-                    )
+                    logger.info(f"Tune Step [{global_steps:0{step_bits}d}/{max_tuning_steps}] Loss {avg_step_loss:.6f}")
                     avg_step_loss = []
 
                     # ---- Save safetensors ---- #
-                    if global_steps % cfgs.save_steps == 0:
+                    if global_steps % save_steps == 0:
                         os.makedirs(cfgs.checkpoint_dir, exist_ok=True)
                         for module in pipeline.tune_modules:
                             save_name = f"{module}-{adapter_name}-step{global_steps:0{step_bits}d}.safetensors"
@@ -386,12 +389,12 @@ class Tuner:
                             logger.info(f"Adapter {adapter_name} in Module {module} has been saved to {save_name}.")
 
                     # ---- Evaluate model performance ---- #
-                    if requires_eval and global_steps % cfgs.eval_steps == 0 and accelerator.is_main_process:
+                    if requires_eval and global_steps % eval_steps == 0 and accelerator.is_main_process:
                         self.evaluate_during_finetune(pipeline, evalset, device, logger)
 
-                if global_steps >= cfgs.max_tuning_steps:
+                if global_steps >= max_tuning_steps:
                     break
-            if global_steps >= cfgs.max_tuning_steps:
+            if global_steps >= max_tuning_steps:
                 break
         # End tuning
         accelerator.wait_for_everyone()
