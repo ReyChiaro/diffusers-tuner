@@ -4,6 +4,7 @@ from hydra.utils import instantiate
 
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
+from loguru import logger
 
 from diffusers_tuner.tuner import TuneConfigs, Tuner
 from pipelines.pipeline_utils import PipelineConfigs, TunePipeline
@@ -12,7 +13,8 @@ from pipelines.pipeline_utils import PipelineConfigs, TunePipeline
 @hydra.main(config_path="configs", config_name="tune.yaml", version_base="v1.2")
 def tune(cfgs: OmegaConf):
 
-    print(OmegaConf.to_yaml(cfgs))
+    log_title = "=" * 20 + " Configs " + "=" * 20
+    logger.info(f"\n{log_title}\n{OmegaConf.to_yaml(cfgs)}\n" + "=" * len(log_title))
     dataset: Dataset = instantiate(cfgs.dataset)
 
     pipe_cfgs: PipelineConfigs = instantiate(cfgs.pipeline)

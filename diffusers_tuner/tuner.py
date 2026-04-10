@@ -315,9 +315,9 @@ class Tuner:
                 drop_last=drop_last,
                 collate_fn=collate_fn,
             )
+        
+        # Accelerator may change the length of loader, we should re-calculate steps
         tune_loader = accelerator.prepare(tune_loader)
-        if evalset is not None:
-            evalset = accelerator.prepare(evalset)
         num_tune_samples = len(tune_loader) * tune_batch_size
         num_epochs = math.ceil(cfgs.max_tuning_steps / num_tune_samples)
 
@@ -342,9 +342,7 @@ class Tuner:
 
         for epoch in range(num_epochs):
             for batch in tune_loader:
-                # batch["images"] = batch["images"].to(dtype=weight_dtype)
-                # batch["targets"] = batch["targets"].to(dtype=weight_dtype)
-                # batch["prompt_embeds"] = batch["prompt_embeds"].to(dtype=weight_dtype)
+    
                 # ---- Forward and Backward ---- #
                 with accelerator.accumulate(*accumulate_modules):
                     with accelerator.autocast():

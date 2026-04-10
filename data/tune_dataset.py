@@ -27,7 +27,11 @@ class DatasetSchema(Dataset):
 
         self.schema = {
             mk: {
-                "data_key": key_schemas[mk]["data_key"],
+                "data_key": (
+                    [key_schemas[mk]["data_key"]]
+                    if isinstance(key_schemas[mk]["data_key"], str)
+                    else key_schemas[mk]["data_key"]
+                ),
                 "key_processor": self._instantiate_key_processor(key_schemas[mk]["key_processor"]),
             }
             for mk in self.model_keys
@@ -82,7 +86,9 @@ class DatasetSchema(Dataset):
             # 2. image path: return Image
             # 3. list of image path: return list of Image
             # 4. user defined other conditions
-            model_sample[mk] = self.schema[mk]["key_processor"](**{dk: sample[dk] for dk in self.schema[mk]["data_key"]})
+            model_sample[mk] = self.schema[mk]["key_processor"](
+                **{dk: sample[dk] for dk in self.schema[mk]["data_key"]}
+            )
         return model_sample
 
 

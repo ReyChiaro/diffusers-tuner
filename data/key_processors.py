@@ -17,4 +17,4 @@ def default_processor(**kwargs) -> str | Image.Image | list[str | Image.Image]:
             return_list.append(v)
         else:
             return_list.append(dv)
-    return return_list
+    return return_list[0] if len(kwargs) == 1 else return_list
