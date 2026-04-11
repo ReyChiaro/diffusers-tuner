@@ -174,7 +174,7 @@ class QwenImageEditPlusForwardHandler(ForwardHandler):
             dtype=weight_dtype,
             generator=generator,
         )
-        eps_latents = eps_latents[:1]
+        eps_latents = eps_latents[:batch_size]
         tgt_latents = img_latents[:batch_size]
         img_latents = img_latents[batch_size:]
 
