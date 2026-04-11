@@ -1,4 +1,4 @@
-![diffusers-tuner](resource/diffusers-tuner.png)
+<img src="resource/diffusers-tuner.png" width="75%">
 
 # 🎨 Diffusers Tuner
 
