@@ -1,4 +1,4 @@
-<img src="resource/diffusers-tuner.png" width="75%">
+<img src="resource/diffusers-tuner.png" width="75%" align="center">
 
 # 🎨 Diffusers Tuner
 
