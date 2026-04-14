@@ -12,10 +12,10 @@ wheels/
 
 # Outputs files
 coco/
+coco.yaml
 
 cache/
 outputs/
 *.zip
 _[!_]*.py
-*.sh
 README_zh.md
