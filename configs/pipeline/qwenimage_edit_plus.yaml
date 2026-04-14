@@ -1,15 +1,14 @@
 _target_: pipelines.pipeline_utils.PipelineConfigs
 
 # Top priority to load module from user-defined checkpoint path, otherwise load from pretrained
-checkpoints: null
+checkpoint: null
 
 # Cannot be None as we should load model_configs.json from it
 pretrained_model_name_or_path: "Qwen/Qwen-Image-Edit-2511"
-
 handler_name: pipelines.pipeline_qwenimage_edit_plus.QwenImageEditPlusForwardHandler
 
 # Tune modules should be subset of load_modules
-tune_modules: []
+adpt_tune_modules: []
 load_modules: ["scheduler", "processor", "tokenizer", "vae", "transformer", "text_encoder"]
 
 # Tune orignal modules without adapter

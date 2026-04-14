@@ -22,16 +22,16 @@ from adapters.utils import register_adapter, add_adapter, enable_adapter, activa
 @dataclasses.dataclass
 class PipelineConfigs:
 
-    checkpoint: dict[str, str] = dataclasses.field(default_factory=dict)
-
     # Same with huggingface from_pretrained
     pretrained_model_name_or_path: str
 
     # The forward handler full path that can be loaded by importlib
     handler_name: str
 
+    checkpoint: dict[str, str] = dataclasses.field(default_factory=dict)
+
     # Modules that should be tuned. If specified, adapters will be attatched into them.
-    tune_modules: list[str] = dataclasses.field(default_factory=list)
+    adpt_tune_modules: list[str] = dataclasses.field(default_factory=list)
 
     # Modules that should be loaded. Useful when GPU memory is constrained as the
     # prompt_embeds can be prepared in advance.
@@ -173,10 +173,10 @@ class TunePipelineManager:
         if not isinstance(pipe_configs, PipelineConfigs):
             pipe_configs: PipelineConfigs = instantiate(pipe_configs)
 
-        self.adpt_configs = {}
+        self.adpt_configs: AdapterConfigs = None
         self.pipe_configs = pipe_configs
-        self.tune_modules = self.pipe_configs.tune_modules
         self.load_modules = self.pipe_configs.load_modules
+        self.adpt_tune_modules = self.pipe_configs.adpt_tune_modules
         self.full_tune_modules = self.pipe_configs.full_tune_modules
         self.checkpoint = self.pipe_configs.checkpoint
 
@@ -189,10 +189,10 @@ class TunePipelineManager:
         Note that this will `disable` all gradients in each modules and
         move them to target deivces with weight dtype.
         """
-        if not set[str](self.pipe_configs.tune_modules).issubset(set[str](self.pipe_configs.load_modules)):
+        if not set[str](self.pipe_configs.adpt_tune_modules).issubset(set[str](self.pipe_configs.load_modules)):
             raise ValueError(
                 f"Tuning modules is not subset of loaded modules: "
-                + f"tune_modules={self.pipe_configs.tune_modules}, "
+                + f"tune_modules={self.pipe_configs.adpt_tune_modules}, "
                 + f"load_modules={self.pipe_configs.load_modules}."
             )
 
@@ -211,7 +211,7 @@ class TunePipelineManager:
                 continue
             for p in m.parameters():
                 p.requires_grad_(False)
-            if m in self.checkpoint:
+            if self.checkpoint and m in self.checkpoint:
                 load_checkpoint_and_dispatch(m, self.checkpoint[m], device_map="auto")
             m.to(device=self.device, dtype=self.weight_dtype)
             logger.info(f"{n} to {self.device} with {self.weight_dtype}, no grad.")
@@ -256,7 +256,7 @@ class TunePipelineManager:
         :param adpt_checkpoint: Adapter checkpoint that ends with "pth" or "safetensors".
         """
         adpt_checkpoint = adpt_configs.checkpoint
-        tune_modules = tune_modules or self.pipe_configs.tune_modules
+        tune_modules = tune_modules or self.pipe_configs.adpt_tune_modules
         weight_dtype = weight_dtype or self.weight_dtype
         device = device or self.device
 
@@ -321,7 +321,7 @@ class TunePipelineManager:
                 )
                 module.load_state_dict(adpt_state_dicts, strict=False)
         self.pipeline.to(device=device, dtype=weight_dtype)
-        self.adpt_configs[adpt_configs.adapter_name] = adpt_configs
+        self.adpt_configs = adpt_configs
         return self.pipeline
 
     def enable_full_tune_modules(
@@ -341,7 +341,7 @@ class TunePipelineManager:
         """
         if not full_tune_modules:
             return self.pipeline
-        tune_modules = tune_modules or self.pipe_configs.tune_modules
+        full_tune_modules = full_tune_modules or self.full_tune_modules
         weight_dtype = weight_dtype or self.weight_dtype
         device = device or self.device
 

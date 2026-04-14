@@ -1,5 +1,5 @@
 defaults:
-  - adapter: lora
+  - adapter: null
   - loss: flow_matching
   - pipeline: ???
   - dataset: ???

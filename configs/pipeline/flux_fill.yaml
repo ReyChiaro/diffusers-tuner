@@ -8,7 +8,7 @@ pretrained_model_name_or_path: "black-forest-labs/FLUX.1-Fill-dev"
 handler_name: pipelines.pipeline_flux_fill.FluxFillForwardHandler
 
 # Tune modules should be subset of load_modules
-tune_modules: []
+adpt_tune_modules: []
 load_modules: ["scheduler", "processor", "tokenizer", "vae", "transformer", "text_encoder"]
 
 # Tune orignal modules without adapter
