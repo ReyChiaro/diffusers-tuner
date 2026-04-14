@@ -49,9 +49,15 @@ class DatasetSchema(Dataset):
             processor = getattr(module, "default_processor")
             return processor
 
-        data_module = key_processor.split(".")[0]
-        processor_name = key_processor.split(".")[1]
-        module = importlib.import_module(f"data.{data_module}.key_processors")
+        if len(key_processor.split(".")) == 1:
+            # Load from data module
+            data_module = "data"
+            processor_name = key_processor
+        elif len(key_processor.split(".")) > 1:
+            # Load from other module
+            data_module = ".".join(key_processor.split(".")[:-1])
+            processor_name = key_processor.split(".")[-1]
+        module = importlib.import_module(f"{data_module}.key_processors")
         processor = getattr(module, processor_name)
         return processor
 
@@ -63,9 +69,16 @@ class DatasetSchema(Dataset):
         if not collate_fn:
             return None
 
-        data_module = collate_fn.split(".")[0]
-        collate_name = collate_fn.split(".")[1]
-        module = importlib.import_module(f"data.{data_module}.collate_fns")
+        if len(collate_fn.split(".")) == 1:
+            # Load from data module
+            data_module = "data"
+            collate_name = collate_fn
+        elif len(collate_fn.split(".")) > 1:
+            # Load from other module
+            data_module = ".".join(collate_fn.split(".")[:-1])
+            collate_name = collate_fn.split(".")[-1]
+
+        module = importlib.import_module(f"{data_module}.collate_fns")
         collate_function = getattr(module, collate_name)
         return collate_function
 
@@ -108,8 +121,8 @@ class DiffusersTunerDataset(DatasetSchema):
         r"""
         If bucket dataset is enabled, then the provided dataset file should be {<bucket_id>: <data_item>}. If not, the file is list of data items. Both conditions use JSON format.
         """
-        samples = []
         if self.bucket_dataset:
+            samples = []
             # Bucket ID -> list of samples
             bucket_samples = load_json_file(self.data_file)
 

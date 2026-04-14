@@ -100,24 +100,24 @@ class Tuner:
     @torch.inference_mode()
     def prepare_prompt_embeds(
         self,
+        accelerator: Accelerator,
         pipeline: TunePipeline,
         dataset: DatasetSchema,
         prompt_embeds_save_dir: str,
+        device: torch.device | None = None,
+        weight_dtype: torch.dtype | None = None,
     ):
+        device = device or accelerator.device
+
+        if weight_dtype is None:
+            weight_dtype = torch.float32
+            if accelerator.mixed_precision == "bf16":
+                weight_dtype = torch.bfloat16
+            elif accelerator.mixed_precision == "fp16":
+                weight_dtype = torch.float16
+
         cfgs = copy.deepcopy(self.cfgs)
         os.makedirs(prompt_embeds_save_dir, exist_ok=True)
-
-        accelerator = Accelerator(
-            split_batches=False,
-            mixed_precision=cfgs.mixed_precision,
-            gradient_accumulation_steps=cfgs.grad_accumulate_steps,
-            log_with=cfgs.log_with,
-            project_config=ProjectConfiguration(
-                project_dir=cfgs.output_dir,
-                logging_dir=cfgs.log_dir,
-            ),
-            kwargs_handlers=[DistributedDataParallelKwargs(find_unused_parameters=True)],
-        )
 
         if accelerator.is_main_process:
             accelerator.init_trackers(cfgs.project_name)
@@ -128,13 +128,6 @@ class Tuner:
 
         log_title = "=" * 20 + " Configs " + "=" * 20
         logger.info(f"\n{log_title}\n{yaml.dump(dataclasses.asdict(cfgs))}\n{'=' * len(log_title)}")
-
-        device = accelerator.device
-        weight_dtype = torch.float32
-        if accelerator.mixed_precision == "bf16":
-            weight_dtype = torch.bfloat16
-        elif accelerator.mixed_precision == "fp16":
-            weight_dtype = torch.float16
 
         # ---- DataLoader preparation ---- #
         batch_size = self.cfgs.data_cfgs.get("tune_batch_size", 1)
@@ -243,24 +236,24 @@ class Tuner:
 
     def finetune(
         self,
+        accelerator: Accelerator,
         pipeline: TunePipeline,
         adapter_name: str,
         tuneset: DatasetSchema,
         evalset: DatasetSchema | None = None,
+        device: torch.device | None = None,
+        weight_dtype: torch.dtype | None = None,
     ):
-        cfgs = copy.deepcopy(self.cfgs)
+        device = device or accelerator.device
 
-        accelerator = Accelerator(
-            split_batches=False,
-            mixed_precision=cfgs.mixed_precision,
-            gradient_accumulation_steps=cfgs.grad_accumulate_steps,
-            log_with=cfgs.log_with,
-            project_config=ProjectConfiguration(
-                project_dir=cfgs.output_dir,
-                logging_dir=cfgs.log_dir,
-            ),
-            kwargs_handlers=[DistributedDataParallelKwargs(find_unused_parameters=True)],
-        )
+        if weight_dtype is None:
+            weight_dtype = torch.float32
+            if accelerator.mixed_precision == "bf16":
+                weight_dtype = torch.bfloat16
+            elif accelerator.mixed_precision == "fp16":
+                weight_dtype = torch.float16
+
+        cfgs = copy.deepcopy(self.cfgs)
 
         if accelerator.is_main_process:
             accelerator.init_trackers(cfgs.project_name)
@@ -270,13 +263,6 @@ class Tuner:
         )
 
         requires_eval = evalset is not None
-
-        device = accelerator.device
-        weight_dtype = torch.float32
-        if accelerator.mixed_precision == "bf16":
-            weight_dtype = torch.bfloat16
-        elif accelerator.mixed_precision == "fp16":
-            weight_dtype = torch.float16
 
         # ---- DataLoader preparation ---- #
         tune_batch_size = self.cfgs.data_cfgs.get("tune_batch_size", 1)
@@ -320,7 +306,9 @@ class Tuner:
         save_steps = math.ceil(cfgs.save_steps / tune_batch_size)
         eval_steps = math.ceil(cfgs.eval_steps / tune_batch_size)
         num_epochs = math.ceil(max_tuning_steps * tune_batch_size / num_tune_samples)
-        step_info = f"{num_tune_samples=}\n{tune_batch_size=}\n{max_tuning_steps=}\n{save_steps=}\n{eval_steps=}\n{num_epochs=}"
+        step_info = (
+            f"{num_tune_samples=}\n{tune_batch_size=}\n{max_tuning_steps=}\n{save_steps=}\n{eval_steps=}\n{num_epochs=}"
+        )
 
         # ---- Pipeline preparation ---- #
         pipeline.pipeline.to(device=device, dtype=weight_dtype)
@@ -346,12 +334,12 @@ class Tuner:
 
         for epoch in range(num_epochs):
             for batch in tune_loader:
-                batch["targets"] = batch["targets"].to(torch.bfloat16)
-                batch["images"] = batch["images"].to(torch.bfloat16)
+                # batch["targets"] = batch["targets"].to(torch.bfloat16)
+                # batch["images"] = batch["images"].to(torch.bfloat16)
                 # ---- Forward and Backward ---- #
                 with accelerator.accumulate(*accumulate_modules):
-                    # with accelerator.autocast():
-                    step_outputs: ForwardOutputs = pipeline(batch)
+                    with accelerator.autocast():
+                        step_outputs: ForwardOutputs = pipeline(batch)
                     loss = step_outputs.loss
                     avg_step_loss.append(loss.cpu().item())
                     accelerator.backward(loss)

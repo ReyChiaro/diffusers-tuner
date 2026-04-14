@@ -18,3 +18,10 @@ def default_processor(**kwargs) -> str | Image.Image | list[str | Image.Image]:
         else:
             return_list.append(dv)
     return return_list[0] if len(kwargs) == 1 else return_list
+
+
+def default_string_processor(**kwargs) -> str:
+    return_list = []
+    for _, dv in kwargs.items():
+        return_list.append(dv)
+    return return_list[0] if len(kwargs) == 1 else return_list
