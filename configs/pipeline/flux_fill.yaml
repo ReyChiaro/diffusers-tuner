@@ -2,5 +2,5 @@ _target_: pipelines.pipeline_utils.PipelineConfigs
 
 pretrained_model_name_or_path: "black-forest-labs/FLUX.1-Fill-dev"
 handler_name: pipelines.pipeline_flux_fill.FluxFillForwardHandler
-tune_modules: [""]
+tune_modules: []
 load_modules: ["scheduler", "processor", "tokenizer", "vae", "transformer", "text_encoder"]

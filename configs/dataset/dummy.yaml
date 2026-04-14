@@ -15,10 +15,17 @@ key_schemas:
   targets:
     data_key: "target"
     key_processor: null
+  
+  # If you want to prepare embeds ahead, we recommand to un-comment following
+  # It allows to save prompt embeds with the same name in safetensors format
+  # target_paths:
+  #   data_key: "target"
+  #   key_processor: null
 
 # collate_fn provides a post processes on batch-view and only processes model keys.
 # for example, following collate functions will first resize images and targets into
 # save sizes and then flatten the input images into a single list and concatenate 
 # them on batch dim (tensor shape [B*img_per_sample,C,H,W]).
 # model_key only
-collate_fn: ["dummy.flatten_and_resize"]
+collate_fn: ["data.dummy.flatten_and_resize"]
+bucket_dataset: false
