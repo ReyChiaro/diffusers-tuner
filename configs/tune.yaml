@@ -8,16 +8,16 @@ defaults:
 
 # Data common configs
 data:
-  tune_batch_size: 1
-  tune_num_workers: 4
-  eval_batch_size: 1
-  eval_num_workers: 4
+  _target_: data.tune_dataset.DataConfigs
+  batch_size: 1
+  num_workers: 4
   drop_last: false
 
 
 # Tuner
 tune:
   _target_: diffusers_tuner.tuner.TuneConfigs
+  _recursive_: true
   project_name: diffusers_pipeline_tuning
   timestamp: ${now:%Y%m%d-%H%M%S}
   output_dir: outputs/${tune.project_name}/${tune.timestamp}
@@ -26,11 +26,12 @@ tune:
   log_per_rank: false
   checkpoint_dir: ${tune.output_dir}/checkpoint
   evaluation_dir: ${tune.output_dir}/evaluation
-  save_steps: 500
-  eval_steps: 500
+  save_steps: 5
+  eval_steps: 5
+  max_eval_num: 8
 
   random_seed: 42
-  max_tuning_steps: 10000
+  max_tuning_steps: 10
   mixed_precision: bf16
   grad_accumulate_steps: 1
   max_grad_norm: 1.0

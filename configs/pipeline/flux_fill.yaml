@@ -1,6 +1,18 @@
 _target_: pipelines.pipeline_utils.PipelineConfigs
 
+# Top priority to load module from user-defined checkpoint path, otherwise load from pretrained
+checkpoints: null
+
+# Cannot be None as we should load model_configs.json from it
 pretrained_model_name_or_path: "black-forest-labs/FLUX.1-Fill-dev"
 handler_name: pipelines.pipeline_flux_fill.FluxFillForwardHandler
+
+# Tune modules should be subset of load_modules
 tune_modules: []
 load_modules: ["scheduler", "processor", "tokenizer", "vae", "transformer", "text_encoder"]
+
+# Tune orignal modules without adapter
+# This should be a dict[component_name, module_name]
+# Example: transformer: [attn.to_q, attn.to_k, attn.to_v]
+# means that these modules will be fully tuned.
+full_tune_modules: null
