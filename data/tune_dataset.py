@@ -1,6 +1,7 @@
 import random
 import importlib
 
+from dataclasses import dataclass
 from torch.utils.data import Dataset, Sampler
 from typing import Callable, Any, TypedDict, Annotated, Literal
 
@@ -9,6 +10,14 @@ from data.data_utils import load_json_file
 
 type DataFileFormat = Annotated[Literal["jsonl", "json"], "Supported format for data file."]
 type PostProcessor = Callable[[dict[str, Any], dict[str, Any], int], dict[str, Any] | None]
+
+
+@dataclass
+class DataConfigs:
+
+    batch_size: int = 1
+    num_workers: int = 4
+    drop_last: bool = False
 
 
 class KeySchema(TypedDict):
