@@ -22,6 +22,7 @@ class AdapterConfigs:
     adapter_name: str = DEFAULT_NAME
     target_modules: list[str] = field(default_factory=list)
     bias: bool = False
+    checkpoint: Optional[str] = None
 
 
 class AdapterManager(nn.Module):
@@ -60,7 +61,11 @@ class AdapterManager(nn.Module):
         # Multiple active adapters with optional weights
         self.active_adapters: Dict[str, float] = {}
 
+        self.weight_dtype = base_model.weight.dtype
+
     def forward(self, x: Tensor):
+        x_dtype = x.dtype
+        x = x.to(self.weight_dtype)
         out = self.base_model(x)
 
         if self.active_adapters:
@@ -88,6 +93,7 @@ class AdapterManager(nn.Module):
                 ada_out = F.linear(x, A, bias_A)
                 ada_out = F.linear(ada_out, B, bias_B)
                 out = out + ada_out * scale
+        out = out.to(x_dtype)
         return out
 
 
@@ -181,6 +187,7 @@ def add_adapter(model: nn.Module, configs: AdapterConfigs, overwrite: bool = Fal
             "target_modules": target_modules,
             "adapter_name": adapter_name,
             "bias": configs.bias,
+            "checkpoint": configs.checkpoint,
         }
         module.adapter_info[adapter_name]["is_enable"] = False
         module.adapter_info[adapter_name]["is_active"] = False
