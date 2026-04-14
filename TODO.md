@@ -2,23 +2,30 @@
 
 ## Training
 
-- [ ] Demo scripts
-- [ ] FSDP support
+- [x] Demo scripts
+- [x] FSDP support
 - [ ] DeepSpeed support
 - [ ] Gradient checkpoint
+
+
+## Adapter
+
+- [ ] Add IP-Adapter support
 
 
 ## Data
 
 - [ ] More robust collate function / data preparation
+- [ ] Update bucket methods
 
 
 ## Pipeline
 
 - [ ] Video generation support
   - [ ] Wan2.1 etc.
+  - [ ] LTX etc.
 
 
-## Known Bugs
+## Others
 
-- [ ] Training steps calculation
+- [ ] Add neccessary comments or docs

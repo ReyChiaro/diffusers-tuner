@@ -2,14 +2,14 @@ import hydra
 import torch
 
 from accelerate import Accelerator
-from accelerate.utils import ProjectConfiguration, DistributedDataParallelKwargs
+from accelerate.utils import ProjectConfiguration, DistributedDataParallelKwargs, FullyShardedDataParallelPlugin
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 from loguru import logger
 
 from diffusers_tuner.tuner import TuneConfigs, Tuner
-from pipelines.pipeline_utils import PipelineConfigs, TunePipeline
+from pipelines.pipeline_utils import PipelineConfigs, TunePipelineManager
 
 
 @hydra.main(config_path="configs", config_name="tune", version_base="v1.2")
@@ -28,6 +28,7 @@ def tune(cfgs: OmegaConf):
             logging_dir=cfgs.tune.log_dir,
         ),
         kwargs_handlers=[DistributedDataParallelKwargs(find_unused_parameters=True)],
+        fsdp_plugin=FullyShardedDataParallelPlugin(ignored_modules=[]),
     )
 
     weight_dtype = torch.float32
@@ -38,30 +39,39 @@ def tune(cfgs: OmegaConf):
 
     dataset: Dataset = instantiate(cfgs.dataset)
     pipe_cfgs: PipelineConfigs = instantiate(cfgs.pipeline)
-    pipeline = TunePipeline(
+    pipeline = TunePipelineManager(
         pipe_cfgs,
         weight_dtype=weight_dtype,
         device=accelerator.device,
     )
 
-    pipeline.add_adapter(
-        cfgs.adapter,
-        tune_modules=pipe_cfgs.tune_modules,
-        requires_grad=True,
-        adpt_checkpoint=None,
-        weight_dtype=torch.bfloat16,
-        device="cuda",
-    )
+    if getattr(cfgs, "adapter", None) is not None:
+        # Adapter tuning
+        pipeline.add_adapter(
+            cfgs.adapter,
+            tune_modules=pipe_cfgs.adpt_tune_modules,
+            requires_grad=True,
+            adpt_checkpoint=None,
+            weight_dtype=weight_dtype,
+            device=accelerator.device,
+        )
+    else:
+        # Tune module parameters
+        pipeline.enable_full_tune_modules(
+            cfgs.pipeline.full_tune_modules,
+            weight_dtype=weight_dtype,
+            device=accelerator.device,
+        )
 
     tuner_cfgs: TuneConfigs = instantiate(cfgs.tune)
     tuner = Tuner(tuner_cfgs)
 
     tuner.finetune(
         accelerator=accelerator,
-        pipeline=pipeline,
+        pipeline_manager=pipeline,
         adapter_name=cfgs.adapter.adapter_name,
         tuneset=dataset,
-        evalset=None,
+        evalset=dataset,  # Use trainset to evaluate during training
         device=accelerator.device,
         weight_dtype=weight_dtype,
     )
