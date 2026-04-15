@@ -2,8 +2,8 @@ export TORCH_USE_CUDA_DSA=1
 export CUDA_LAUNCH_BLOCKING=1
 export HYDRA_FULL_ERROR=1
 
-MODEL_PATH="/mtc/models/Qwen-Image-Edit-2511"
-DATA_PATH="dataset/coco/coco_bucket.json"
+MODEL_PATH="Qwen/Qwen-Image-Edit-2511"
+DATA_PATH="dataset/dummy/bucket_demo.json"
 
 accelerate launch \
     --num_machines 1 \
