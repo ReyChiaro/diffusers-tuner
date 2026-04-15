@@ -301,6 +301,7 @@ class TunePipelineManager:
             register_adapter(module)
             add_adapter(module, adpt_configs, overwrite=False)
             if requires_grad:
+                logger.info(f"Adapter in {module_name} enable gradient.")
                 enable_adapter(module, adpt_configs.adapter_name)
             activate_adapter(module, adpt_configs.adapter_name)
 
@@ -353,10 +354,13 @@ class TunePipelineManager:
                     + "otherwise it will not be full tuned."
                 )
                 continue
+            enabled_module_names = []
             for n, m in self.get_module(ftm_name).named_modules():
                 if not any(p in n for p in full_tune_modules[ftm_name]):
                     continue
                 m.requires_grad_(True)
+                enabled_module_names.append(n)
+            logger.info(f"Found {len(enabled_module_names)} modules in component {ftm_name} enable gradient.")
         return self.pipeline
 
     def __call__(self, batch: dict[str, Any]) -> ForwardOutputs:

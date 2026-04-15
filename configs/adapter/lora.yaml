@@ -4,3 +4,4 @@ rank: 4
 alpha: null
 adapter_name: default_lora_adapter
 bias: false
+checkpoint: null
